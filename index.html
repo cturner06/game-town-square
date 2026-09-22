@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Game Town Square — Coming Soon</title>
+<meta name="description" content="Game Town Square. Run your squares boards for any game. Coming soon.">
+<meta name="robots" content="noindex">
+<style>
+:root{--table:#2B211B;--gold:#F2B61D;--chalk:#F2EEE9;--dim:#BDB3A8;
+  --ui:'Barlow',system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  --display:'Saira Extra Condensed','Arial Narrow',Impact,sans-serif;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;
+  font:400 17px/1.5 var(--ui);color:var(--chalk);
+  background:var(--table) repeating-linear-gradient(94deg,rgba(255,255,255,.018) 0 2px,transparent 2px 9px)}
+.wrap{max-width:520px}
+svg{width:112px;height:112px}
+h1{margin:18px 0 6px;font:800 clamp(42px,12vw,72px)/1 var(--display);text-transform:uppercase;letter-spacing:1px}
+.tag{margin:0 0 26px;color:var(--gold);font-weight:700;letter-spacing:2px;text-transform:uppercase;font-size:14px}
+.card{background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);border-radius:10px;padding:20px}
+.card h2{margin:0 0 8px;font:700 22px/1.2 var(--ui)}
+.card p{margin:0;color:var(--dim)}
+.foot{margin-top:22px;font-size:14px;color:var(--dim)}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Game Town Square"><path d="M256 24 L456 86 V252 C456 378 366 452 256 492 C146 452 56 378 56 252 V86 Z" fill="#F2B61D"/><path d="M256 50 L430 104 V252 C430 362 352 428 256 464 C160 428 82 362 82 252 V104 Z" fill="#2B211B"/><path d="M256 68 L412 116 V252 C412 350 342 410 256 444 C170 410 100 350 100 252 V116 Z" fill="none" stroke="#F2EEE9" stroke-width="5"/><rect x="154.0" y="122" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="228.0" y="122" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="302.0" y="122" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="154.0" y="196" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="224.0" y="192" width="64" height="64" rx="10" fill="#F2B61D"/><polygon points="256.0,199.0 262.7,216.8 281.7,217.7 266.8,229.5 271.9,247.8 256.0,237.3 240.1,247.8 245.2,229.5 230.3,217.7 249.3,216.8" fill="#2B211B"/><rect x="302.0" y="196" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="154.0" y="270" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="228.0" y="270" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="302.0" y="270" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/></svg>
+  <h1>Game Town Square</h1>
+  <p class="tag">Squares boards for any game</p>
+  <div class="card">
+    <h2>Under construction</h2>
+    <p>We're building it now. Check back soon.</p>
+  </div>
+  <p class="foot">&copy; <span id="y">2026</span> Game Town Square</p>
+</main>
+<script>document.getElementById("y").textContent = new Date().getFullYear();</script>
+</body>
+</html>
