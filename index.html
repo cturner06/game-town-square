@@ -3,40 +3,963 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Game Town Square — Coming Soon</title>
-<meta name="description" content="Game Town Square. Run your squares boards for any game. Coming soon.">
-<meta name="robots" content="noindex">
+<title>Game Town Square</title>
+<link rel="icon" href="brand/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="brand/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
+<meta name="theme-color" content="#2B211B">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Kalam:wght@400;700&family=Saira+Extra+Condensed:wght@800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
-:root{--table:#2B211B;--gold:#F2B61D;--chalk:#F2EEE9;--dim:#BDB3A8;
-  --ui:'Barlow',system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
-  --display:'Saira Extra Condensed','Arial Narrow',Impact,sans-serif;
-  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+:root{
+  --table:#2B211B; --table-2:#33271F; --chalk:#F2EEE9; --chalk-dim:#BDB3A8;
+  --paper:#FFFFFF; --ink:#1D1D1D; --rule:#3A3A3A; --muted:#6B6B6B;
+  --marker:#1F4FD1; --danger:#B3261E; --ok:#2E7D32;
+  --hand:'Kalam',cursive; --ui:'Barlow',system-ui,sans-serif; --display:'Saira Extra Condensed','Arial Narrow',sans-serif;
+}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%}
-body{display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;
-  font:400 17px/1.5 var(--ui);color:var(--chalk);
-  background:var(--table) repeating-linear-gradient(94deg,rgba(255,255,255,.018) 0 2px,transparent 2px 9px)}
-.wrap{max-width:520px}
-svg{width:112px;height:112px}
-h1{margin:18px 0 6px;font:800 clamp(42px,12vw,72px)/1 var(--display);text-transform:uppercase;letter-spacing:1px}
-.tag{margin:0 0 26px;color:var(--gold);font-weight:700;letter-spacing:2px;text-transform:uppercase;font-size:14px}
-.card{background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);border-radius:10px;padding:20px}
-.card h2{margin:0 0 8px;font:700 22px/1.2 var(--ui)}
-.card p{margin:0;color:var(--dim)}
-.foot{margin-top:22px;font-size:14px;color:var(--dim)}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html,body{margin:0}
+body{
+  font:400 16px/1.45 var(--ui); color:var(--chalk); min-height:100vh;
+  background:var(--table) repeating-linear-gradient(94deg,rgba(255,255,255,.018) 0 2px,transparent 2px 9px);
+}
+a{color:inherit}
+button,input{font:inherit}
+:focus-visible{outline:3px solid #7FA6FF;outline-offset:2px}
+
+/* ---------- App chrome ---------- */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.1)}
+.brand{display:flex;align-items:center;gap:8px;font:800 26px/1 var(--display);letter-spacing:.5px;text-decoration:none;color:var(--chalk);white-space:nowrap}
+.brand .mark{flex-shrink:0}
+.who{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--chalk-dim);min-width:0}
+.who span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.who .btn{white-space:nowrap;flex-shrink:0}
+.wrap{max-width:1040px;margin:0 auto;padding:18px 16px 60px}
+h1{font:800 42px/1 var(--display);margin:6px 0 4px;letter-spacing:.3px}
+h2{font:700 20px/1.2 var(--ui);margin:28px 0 10px}
+.sub{color:var(--chalk-dim);margin:0 0 14px}
+.crumbs{font-size:14px;color:var(--chalk-dim)}
+.crumbs a{color:var(--chalk-dim)}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.btn{min-height:40px;padding:8px 14px;border:0;border-radius:6px;background:var(--paper);color:var(--ink);font-weight:600;cursor:pointer}
+.btn.primary{background:var(--marker);color:#fff}
+.btn.danger{color:var(--danger)}
+.btn.ghost{background:transparent;color:var(--chalk);box-shadow:inset 0 0 0 1px rgba(255,255,255,.3)}
+.btn:disabled{opacity:.5;cursor:default}
+.list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.list li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:8px;background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+.list a{font-weight:600;text-decoration:none}
+.list a:hover{text-decoration:underline}
+.meta{font-size:14px;color:var(--chalk-dim)}
+.empty{color:var(--chalk-dim);padding:18px 0}
+.err{color:#FFB4AB}
+.panel{max-width:380px;margin:40px auto;padding:22px;border-radius:10px;background:var(--paper);color:var(--ink)}
+.panel h1{color:var(--ink)}
+.panel p{color:var(--muted)}
+
+/* ---------- Board block ---------- */
+.block{margin:26px 0 34px}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:10px}
+.status{font-size:14px;font-weight:700;padding:6px 10px;border-radius:999px;margin-right:4px}
+.status.open{background:rgba(46,125,50,.25);color:#B9E6BC}
+.status.locked{background:rgba(179,38,30,.3);color:#FFC9C4}
+.fit{position:relative;width:100%;overflow:hidden}
+
+/* ---------- The sheet (this is what gets exported) ---------- */
+.sheet{position:absolute;top:0;left:0;width:980px;background:var(--paper);color:var(--ink);padding:14px 22px 16px;transform-origin:top left;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.kick{text-align:center;font:700 26px/1.2 var(--hand);min-height:30px}
+.shead{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.title{font:800 78px/.92 var(--display);text-transform:uppercase;letter-spacing:1px;color:#3B3B3B;white-space:nowrap;overflow:hidden;min-width:0}
+.price{font:700 18px var(--ui);color:#7A7A7A;padding-top:6px;white-space:nowrap}
+.smain{display:flex;gap:14px;margin-top:10px}
+.grid{flex:1;display:grid;grid-template-columns:46px 44px repeat(10,minmax(0,1fr));grid-template-rows:48px 44px repeat(10,58px);border-top:2px solid var(--rule);border-left:2px solid var(--rule)}
+.grid>div{border-right:1px solid var(--rule);border-bottom:1px solid var(--rule);min-width:0}
+.grid>div.c10{border-right-width:2px}
+.grid>div.r10{border-bottom-width:2px}
+.corner{grid-column:1/3;grid-row:1/3}
+.tlabel{grid-column:3/13;grid-row:1;display:flex;align-items:center;justify-content:center;padding:0 10px;border-right-width:2px !important;overflow:hidden}
+.team{font:800 40px/1 var(--display);text-transform:uppercase;letter-spacing:1px;white-space:nowrap}
+.slabel{grid-column:1;grid-row:3/13;position:relative;overflow:hidden;border-bottom-width:2px !important}
+.slabel>div{position:absolute;left:50%;top:50%;width:580px;transform:translate(-50%,-50%) rotate(-90deg);display:flex;align-items:center;justify-content:center;white-space:nowrap}
+.num{display:flex;align-items:center;justify-content:center;font:800 30px/1 var(--display)}
+.sq{position:relative;display:flex;align-items:center;justify-content:center;padding:11px 3px}
+.sq .nm{display:block;width:100%;text-align:center;font:400 15px/1.05 var(--hand);max-height:32px;overflow:hidden;overflow-wrap:anywhere}
+.sq .no{position:absolute;right:3px;bottom:1px;font:600 10px/1 var(--ui);color:#555}
+.sq.win{background:#FFE58A}
+.sq .wb{position:absolute;left:2px;top:2px;font:700 9px/1 var(--ui);background:#1D1D1D;color:#FFE14D;padding:2px 3px;border-radius:3px;white-space:nowrap}
+.gstat{text-align:center;font:700 15px/1.3 var(--ui);color:#444;margin-top:2px}
+.gstat.on{color:#B3261E}
+.pay>div.won{background:#FFF4CC}
+.pay .sc{font:600 11px/1.2 var(--ui);color:#666;text-align:center;margin-top:2px}
+.pay .who{display:block;width:100%;margin:auto 0 2px;font:700 24px/1.05 var(--hand);color:#1D1D1D;text-align:center;overflow-wrap:anywhere}
+.pay .who.none{font:600 13px/1.2 var(--ui);color:#666}
+.pay .amt{font:700 16px/1.2 var(--ui);color:#444;text-align:center}
+.status.live{background:rgba(179,38,30,.9);color:#fff}
+.edit .sq,.edit .num{cursor:pointer}
+.edit .sq:hover{background:#EEF3FF}
+.edit .num:hover{filter:brightness(.92)}
+.pay{width:130px;display:flex;flex-direction:column;gap:10px;border:2px solid var(--rule);padding:10px}
+.pay>div{flex:1;border:2px solid var(--rule);padding:8px;display:flex;flex-direction:column}
+.pay b{font:700 14px var(--ui)}
+.pay span{margin:auto 0;text-align:center;font:700 20px var(--ui);color:#666}
+.foot{text-align:center;font:700 34px/1.2 var(--hand);margin-top:8px;letter-spacing:1px}
+
+/* ---------- Modal & toast ---------- */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:50;padding:12px}
+@media (min-width:640px){.scrim{align-items:center}}
+.modal{width:100%;max-width:460px;max-height:90vh;overflow:auto;background:var(--paper);color:var(--ink);border-radius:12px;padding:18px}
+.modal h3{margin:0 0 6px;font:700 20px var(--ui)}
+.modal p{margin:0 0 12px;color:var(--muted)}
+.mform{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.mform label{display:flex;flex-direction:column;gap:4px;font-size:14px;font-weight:600;color:#444;grid-column:span 2}
+.mform label.half{grid-column:span 1}
+.mform input{min-height:42px;padding:8px 10px;border:1px solid #B8B8B8;border-radius:6px;font-size:16px;color:var(--ink);background:#fff;width:100%}
+.mform input[type=color]{padding:3px;height:42px}
+.swatches{display:flex;gap:6px}
+.swatch{width:34px;height:28px;border-radius:5px;border:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.35);cursor:pointer}
+.mbtns{grid-column:span 2;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:6px}
+.mbtns .btn{box-shadow:inset 0 0 0 1px #C9C9C9}
+.mbtns .btn.primary{box-shadow:none}
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--paper);color:var(--ink);padding:10px 16px;border-radius:8px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.4);z-index:60;max-width:90vw}
+.toast.bad{background:#FFDAD6;color:#410002}
+@media (prefers-reduced-motion:no-preference){.modal{animation:up .16s ease-out}@keyframes up{from{transform:translateY(12px);opacity:0}}}
 </style>
 </head>
 <body>
-<main class="wrap">
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Game Town Square"><path d="M256 24 L456 86 V252 C456 378 366 452 256 492 C146 452 56 378 56 252 V86 Z" fill="#F2B61D"/><path d="M256 50 L430 104 V252 C430 362 352 428 256 464 C160 428 82 362 82 252 V104 Z" fill="#2B211B"/><path d="M256 68 L412 116 V252 C412 350 342 410 256 444 C170 410 100 350 100 252 V116 Z" fill="none" stroke="#F2EEE9" stroke-width="5"/><rect x="154.0" y="122" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="228.0" y="122" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="302.0" y="122" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="154.0" y="196" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="224.0" y="192" width="64" height="64" rx="10" fill="#F2B61D"/><polygon points="256.0,199.0 262.7,216.8 281.7,217.7 266.8,229.5 271.9,247.8 256.0,237.3 240.1,247.8 245.2,229.5 230.3,217.7 249.3,216.8" fill="#2B211B"/><rect x="302.0" y="196" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="154.0" y="270" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="228.0" y="270" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="302.0" y="270" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/></svg>
-  <h1>Game Town Square</h1>
-  <p class="tag">Squares boards for any game</p>
-  <div class="card">
-    <h2>Under construction</h2>
-    <p>We're building it now. Check back soon.</p>
-  </div>
-  <p class="foot">&copy; <span id="y">2026</span> Game Town Square</p>
-</main>
-<script>document.getElementById("y").textContent = new Date().getFullYear();</script>
+<div id="app"></div>
+<script>
+/* =====================================================================
+   SETUP: paste your two Supabase values here (see SETUP.md, step 3).
+   ===================================================================== */
+const SUPABASE_URL = "PASTE_YOUR_PROJECT_URL";
+const SUPABASE_ANON_KEY = "PASTE_YOUR_ANON_PUBLIC_KEY";
+/* ===================================================================== */
+
+const CONFIGURED = !SUPABASE_URL.startsWith("PASTE") && !SUPABASE_ANON_KEY.startsWith("PASTE");
+const sb = CONFIGURED ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const SHEET_W = 980;
+const S = { session: null, me: null, admin: new Set() };
+const $app = document.getElementById("app");
+
+/* ---------- Small helpers ---------- */
+function h(tag, attrs = {}, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === false || v == null) continue;
+    if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "class") el.className = v;
+    else if (k === "style") el.style.cssText = v;
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat(Infinity)) {
+    if (kid === false || kid == null) continue;
+    el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  }
+  return el;
+}
+const btn = (label, fn, cls = "") => h("button", { class: "btn " + cls, type: "button", onclick: fn }, label);
+const money = n => Number(n || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
+const boardName = b => [b.top_team, b.side_team].filter(Boolean).join(" vs ") || "Untitled board";
+const link = hash => location.origin + location.pathname + hash;
+const isSuper = () => !!(S.me && S.me.is_super_admin);
+const canManage = cid => !!S.me && (isSuper() || S.admin.has(cid));
+function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
+function textOn(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+  if (!m) return "#1D1D1D";
+  const n = parseInt(m[1], 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? "#1D1D1D" : "#FFFFFF";
+}
+function toast(msg, bad = false) {
+  document.querySelectorAll(".toast").forEach(t => t.remove());
+  const t = h("div", { class: "toast" + (bad ? " bad" : ""), role: "status" }, msg);
+  document.body.append(t);
+  setTimeout(() => t.remove(), 3200);
+}
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); toast("Link copied"); }
+  catch { window.prompt("Copy this link:", text); }
+}
+function must({ data, error }) { if (error) throw new Error(error.message); return data; }
+
+/* ---------- Modal ---------- */
+function modal({ title, text, fields = [], ok = "Save", okClass = "primary", extra = [], after }) {
+  return new Promise(resolve => {
+    const inputs = {};
+    const close = val => { scrim.remove(); document.removeEventListener("keydown", onKey); resolve(val); };
+    const onKey = e => { if (e.key === "Escape") close(null); };
+    const form = h("form", { class: "mform", onsubmit: e => {
+      e.preventDefault();
+      const vals = {};
+      for (const [k, el] of Object.entries(inputs)) vals[k] = el.value;
+      close(vals);
+    }});
+    for (const f of fields) {
+      const inp = h("input", {
+        type: f.type || "text", name: f.name, value: f.value ?? "", placeholder: f.placeholder,
+        inputmode: f.inputmode, min: f.min, max: f.max, step: f.step, maxlength: f.maxlength,
+        autocomplete: f.autocomplete || "off", required: f.required, list: f.list
+      });
+      inputs[f.name] = inp;
+      form.append(h("label", { class: f.half ? "half" : "" }, h("span", {}, f.label), inp));
+    }
+    form.append(h("div", { class: "mbtns" },
+      btn("Cancel", () => close(null)),
+      extra.map(x => btn(x.label, () => close({ __action: x.action }), x.cls || "")),
+      h("button", { class: "btn " + okClass, type: "submit" }, ok)
+    ));
+    const scrim = h("div", { class: "scrim", onclick: e => { if (e.target === scrim) close(null); } },
+      h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": title },
+        h("h3", {}, title), text && h("p", {}, text), form));
+    document.body.append(scrim);
+    document.addEventListener("keydown", onKey);
+    if (after) after(inputs);
+    const first = form.querySelector("input");
+    (first || form.querySelector(".btn.primary, .btn.danger"))?.focus();
+    if (first && first.select) first.select();
+  });
+}
+const confirmBox = (title, text, ok, okClass = "danger") => modal({ title, text, ok, okClass }).then(v => !!v);
+
+/* ---------- Auth state ---------- */
+async function loadMe() {
+  S.session = must(await sb.auth.getSession()).session;
+  S.me = null; S.admin = new Set();
+  if (!S.session) return;
+  const uid = S.session.user.id;
+  const p = must(await sb.from("profiles").select("*").eq("id", uid).maybeSingle());
+  S.me = p || { id: uid, email: S.session.user.email, is_super_admin: false };
+  const ca = must(await sb.from("community_admins").select("community_id").eq("user_id", uid));
+  ca.forEach(r => S.admin.add(r.community_id));
+}
+
+/* ---------- Layout ---------- */
+const MARK_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="30" height="30" aria-hidden="true" class="mark"><path d="M256 24 L456 86 V252 C456 378 366 452 256 492 C146 452 56 378 56 252 V86 Z" fill="#F2B61D"/><path d="M256 50 L430 104 V252 C430 362 352 428 256 464 C160 428 82 362 82 252 V104 Z" fill="#2B211B"/><path d="M256 68 L412 116 V252 C412 350 342 410 256 444 C170 410 100 350 100 252 V116 Z" fill="none" stroke="#F2EEE9" stroke-width="5"/><rect x="154.0" y="122" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="228.0" y="122" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="302.0" y="122" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="154.0" y="196" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="224.0" y="192" width="64" height="64" rx="10" fill="#F2B61D"/><polygon points="256.0,199.0 262.7,216.8 281.7,217.7 266.8,229.5 271.9,247.8 256.0,237.3 240.1,247.8 245.2,229.5 230.3,217.7 249.3,216.8" fill="#2B211B"/><rect x="302.0" y="196" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="154.0" y="270" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="228.0" y="270" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/><rect x="302.0" y="270" width="56" height="56" rx="8" fill="none" stroke="#F2EEE9" stroke-width="8"/></svg>';
+function brandLink() {
+  const a = h("a", { class: "brand", href: "#/" });
+  a.innerHTML = MARK_SVG;
+  a.append("Game Town Square");
+  return a;
+}
+function topbar() {
+  return h("header", { class: "top" },
+    brandLink(),
+    h("div", { class: "who" },
+      S.session
+        ? [h("span", {}, S.me?.email + (isSuper() ? " (super admin)" : "")), btn("Sign out", signOut, "ghost")]
+        : h("a", { href: "#/login" }, "Admin sign in"))
+  );
+}
+function render(...nodes) {
+  $app.replaceChildren(topbar(), h("main", { class: "wrap" }, ...nodes));
+  requestAnimationFrame(fitBoards);
+}
+function fitBoards() {
+  document.querySelectorAll(".fit").forEach(fit => {
+    const sheet = fit.firstElementChild;
+    const s = Math.min(1, fit.clientWidth / SHEET_W);
+    sheet.style.transform = `scale(${s})`;
+    fit.style.height = Math.ceil(sheet.offsetHeight * s) + "px";
+  });
+}
+addEventListener("resize", fitBoards);
+document.fonts?.ready.then(fitBoards);
+
+/* ---------- Router ---------- */
+async function route() {
+  stopWatching();
+  const [key, id] = location.hash.replace(/^#\/?/, "").split("/");
+  try {
+    if (!CONFIGURED) return viewSetup();
+    if (key === "b" && id) return await viewBoard(id);
+    if (key === "s" && id) return await viewSet(id);
+    if (key === "w" && id) return await viewWeek(id);
+    if (key === "login" || !S.session) return viewLogin();
+    if (key === "c" && id) return await viewCommunity(id);
+    return await viewHome();
+  } catch (e) {
+    render(h("p", { class: "err" }, e.message));
+  }
+}
+addEventListener("hashchange", route);
+
+/* ---------- Views ---------- */
+function viewSetup() {
+  $app.replaceChildren(h("div", { class: "panel" },
+    h("h1", {}, "Almost ready"),
+    h("p", {}, "Open index.html and paste your Supabase project URL and anon public key at the top of the script. See SETUP.md, step 3.")));
+}
+
+function viewLogin() {
+  const email = h("input", { type: "email", autocomplete: "email", required: true, placeholder: "you@example.com" });
+  const pass = h("input", { type: "password", autocomplete: "current-password", required: true, minlength: 6 });
+  const signIn = async e => {
+    e.preventDefault();
+    const { error } = await sb.auth.signInWithPassword({ email: email.value.trim(), password: pass.value });
+    if (error) return toast(error.message, true);
+    await loadMe(); go("#/");
+  };
+  const signUp = async () => {
+    if (!email.value || pass.value.length < 6) return toast("Enter an email and a password of 6+ characters.", true);
+    const { data, error } = await sb.auth.signUp({ email: email.value.trim(), password: pass.value });
+    if (error) return toast(error.message, true);
+    if (!data.session) return toast("Check your email to confirm your login, then sign in.");
+    await loadMe(); go("#/");
+  };
+  $app.replaceChildren(topbar(), h("div", { class: "panel" },
+    h("h1", {}, "Admin sign in"),
+    h("p", {}, "Viewers don't need to sign in. Just open the board link you were sent."),
+    h("form", { class: "mform", onsubmit: signIn },
+      h("label", {}, h("span", {}, "Email"), email),
+      h("label", {}, h("span", {}, "Password"), pass),
+      h("div", { class: "mbtns" }, btn("Create login", signUp), h("button", { class: "btn primary", type: "submit" }, "Sign in")))));
+}
+
+async function signOut() { await sb.auth.signOut(); await loadMe(); go("#/login"); }
+
+async function viewHome() {
+  const all = must(await sb.from("communities").select("id,name").order("name"));
+  const list = isSuper() ? all : all.filter(c => S.admin.has(c.id));
+  render(
+    h("h1", {}, "Communities"),
+    isSuper() && h("div", { class: "actions" }, btn("New community", newCommunity, "primary")),
+    list.length
+      ? h("ul", { class: "list" }, list.map(c => h("li", {}, h("a", { href: "#/c/" + c.id }, c.name))))
+      : h("p", { class: "empty" }, isSuper()
+          ? "Create a community to start adding board sets."
+          : `You aren't an admin on any community yet. Ask the super admin to add ${S.me.email}.`)
+  );
+}
+
+async function newCommunity() {
+  const v = await modal({ title: "New community", fields: [{ name: "name", label: "Community name", required: true, maxlength: 80 }], ok: "Create community" });
+  if (!v || !v.name.trim()) return;
+  try { must(await sb.from("communities").insert({ name: v.name.trim() })); route(); }
+  catch (e) { toast(e.message, true); }
+}
+
+/* ---------- Game schedule (ESPN model) ----------
+   Every board works the same. Only the schedule differs by league, the way ESPN does it:
+   football runs in numbered weeks; basketball, baseball, hockey and soccer run by game date. */
+const range = (n, f) => Array.from({ length: n }, (_, i) => f(i + 1));
+const LEAGUES = {
+  "NFL": { sport: "Football", mode: "week", weeks: ["Hall of Fame Weekend", ...range(3, i => `Preseason Week ${i}`), ...range(18, i => `Week ${i}`),
+    "Wild Card", "Divisional Round", "Conference Championships", "Pro Bowl", "Super Bowl"] },
+  "College Football": { sport: "Football", mode: "week", weeks: [...range(16, i => `Week ${i}`), "Bowls"] },
+  "NBA": { sport: "Basketball", mode: "date", crossYear: true },
+  "WNBA": { sport: "Basketball", mode: "date" },
+  "Men's College Basketball": { sport: "Basketball", mode: "date", crossYear: true },
+  "Women's College Basketball": { sport: "Basketball", mode: "date", crossYear: true },
+  "MLB": { sport: "Baseball", mode: "date" },
+  "NHL": { sport: "Hockey", mode: "date", crossYear: true },
+  "MLS": { sport: "Soccer", mode: "date" }
+};
+const SPORTS = ["Football", "Basketball", "Baseball", "Softball", "Hockey", "Soccer", "Volleyball", "Lacrosse"];
+function leagueFor(name) {
+  const k = Object.keys(LEAGUES).find(k => k.toLowerCase() === String(name || "").trim().toLowerCase());
+  return k ? { name: k, ...LEAGUES[k] } : null;
+}
+// Football seasons run into January and February, so those months belong to last year's season.
+function currentSeason() { const d = new Date(); return d.getMonth() < 2 ? d.getFullYear() - 1 : d.getFullYear(); }
+// Winter leagues (NBA, NHL, college hoops) span two years; ESPN shows them as "2026-27".
+const seasonLabel = (league, season) => leagueFor(league)?.crossYear ? `${season}-${String(season + 1).slice(-2)}` : String(season);
+function dateParts(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return { y, m, key: y * 10000 + m * 100 + d,
+    label: dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }) };
+}
+const weekSort = (a, b) => (b.season - a.season) || (b.sort_key - a.sort_key) || String(b.created_at).localeCompare(String(a.created_at));
+function setList(id, values) {
+  let dl = document.getElementById(id);
+  if (!dl) { dl = h("datalist", { id }); document.body.append(dl); }
+  dl.replaceChildren(...values.map(v => h("option", { value: v })));
+}
+const countOf = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+async function viewCommunity(id) {
+  const c = must(await sb.from("communities").select("*").eq("id", id).maybeSingle());
+  if (!c) throw new Error("Community not found.");
+  if (!canManage(id)) throw new Error("You aren't an admin on this community.");
+  const weeks = must(await sb.from("weeks").select("id,community_id,league,season,label,sort_key,created_at,board_sets(id)")
+    .eq("community_id", id)).sort(weekSort);
+
+  // Group by league and season, like ESPN's schedule pages
+  const groups = new Map();
+  for (const w of weeks) {
+    const k = `${w.league} ${seasonLabel(w.league, w.season)}`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(w);
+  }
+
+  const nodes = [
+    h("div", { class: "crumbs" }, h("a", { href: "#/" }, "Communities")),
+    h("h1", {}, c.name),
+    h("div", { class: "actions" }, btn("New game week", () => newWeek(id, weeks), "primary")),
+    weeks.length
+      ? [...groups].map(([k, ws]) => [
+          h("h2", {}, k),
+          h("ul", { class: "list" }, ws.map(w => h("li", {},
+            h("div", {}, h("a", { href: "#/w/" + w.id }, w.label),
+              h("div", { class: "meta" }, countOf(w.board_sets.length, "board set"))),
+            btn("Delete", () => deleteWeek(w), "danger"))))])
+      : h("p", { class: "empty" }, "No game weeks yet. Create one, then add a board set for each game day in it.")
+  ];
+
+  if (isSuper()) {
+    const admins = must(await sb.from("community_admins").select("user_id, profiles(email)").eq("community_id", id));
+    nodes.push(
+      h("h2", {}, "Admins"),
+      h("div", { class: "actions" }, btn("Add admin", () => addAdmin(id))),
+      admins.length
+        ? h("ul", { class: "list" }, admins.map(a => h("li", {},
+            h("span", {}, a.profiles?.email || a.user_id),
+            btn("Remove", () => removeAdmin(id, a), "danger"))))
+        : h("p", { class: "empty" }, "No admins yet. You can manage this community as super admin."),
+      h("h2", {}, "Community"),
+      h("div", { class: "actions" }, btn("Delete community", () => deleteCommunity(c), "danger"))
+    );
+  }
+  render(...nodes);
+}
+
+async function newWeek(cid, weeks) {
+  setList("league-list", Object.keys(LEAGUES));
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const v = await modal({ title: "New game week", text: "Pick a league. Football leagues use weeks; other ESPN leagues use the game date. Any other league, type your own.",
+    fields: [
+      { name: "league", label: "League", list: "league-list", placeholder: "NFL, NBA, MLB, or type one", required: true, maxlength: 40 },
+      { name: "season", label: "Season", type: "number", inputmode: "numeric", value: currentSeason(), min: 2000, max: 2100, half: true },
+      { name: "label", label: "Week", list: "week-list", placeholder: "Week 1", maxlength: 40, half: true },
+      { name: "date", label: "Game date", type: "date", value: today }
+    ],
+    ok: "Create week",
+    after: inputs => {
+      const show = (el, on) => { el.closest("label").style.display = on ? "" : "none"; };
+      const sync = () => {
+        const L = leagueFor(inputs.league.value), byDate = L?.mode === "date";
+        setList("week-list", L?.weeks || []);
+        show(inputs.season, !byDate); show(inputs.label, !byDate); show(inputs.date, byDate);
+      };
+      inputs.league.addEventListener("input", sync); sync();
+    } });
+  if (!v) return;
+  const L = leagueFor(v.league);
+  const league = L ? L.name : v.league.trim();
+  if (!league) return toast("Enter a league.", true);
+  let season, label, sort_key;
+  if (L?.mode === "date") {
+    if (!v.date) return toast("Pick the game date.", true);
+    const d = dateParts(v.date);
+    season = L.crossYear && d.m < 8 ? d.y - 1 : d.y;   // Jan-Jul games belong to the season that started last fall
+    label = d.label; sort_key = d.key;
+  } else {
+    season = Number(v.season) || currentSeason();
+    label = v.label.trim();
+    if (!label) return toast("Enter the week.", true);
+    // Preset weeks sort in season order; typed-in weeks go after the latest one
+    const idx = L ? L.weeks.findIndex(x => x.toLowerCase() === label.toLowerCase()) : -1;
+    if (idx >= 0) label = L.weeks[idx];
+    const same = weeks.filter(w => w.league === league && w.season === season);
+    sort_key = idx >= 0 ? idx + 1 : Math.max(0, ...same.map(w => w.sort_key)) + 1;
+  }
+  const { data, error } = await sb.from("weeks").insert({ community_id: cid, league, season, label, sort_key }).select().single();
+  if (error) return toast(error.code === "23505" ? "That week already exists in this community." : error.message, true);
+  go("#/w/" + data.id);
+}
+
+async function deleteWeek(w) {
+  if (!await confirmBox("Delete game week?", `${w.label} (${w.league} ${seasonLabel(w.league, w.season)}) and all its board sets and boards will be deleted.`, "Delete week")) return;
+  try {
+    const rows = must(await sb.from("weeks").delete().eq("id", w.id).select());
+    if (!rows.length) return toast("This week has a locked board. Only the super admin can delete it.", true);
+    location.hash.startsWith("#/w/") ? go("#/c/" + w.community_id) : route();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function viewWeek(id) {
+  const w = must(await sb.from("weeks").select("*, communities(name)").eq("id", id).maybeSingle());
+  if (!w) throw new Error("Game week not found. Check the link.");
+  const sets = must(await sb.from("board_sets").select("id,name,created_at,boards(id,locked)").eq("week_id", id).order("created_at"));
+  const mg = canManage(w.community_id);
+  render(
+    mg && h("div", { class: "crumbs" }, h("a", { href: "#/c/" + w.community_id }, w.communities?.name || "Community")),
+    h("h1", {}, w.label),
+    h("p", { class: "sub" }, `${w.league}, ${seasonLabel(w.league, w.season)} season` + (mg ? "" : ` (${w.communities?.name || ""})`)),
+    h("div", { class: "actions" },
+      btn("Copy week link", () => copy(link("#/w/" + id))),
+      mg && btn("New board set", () => newSet(w), "primary")),
+    sets.length
+      ? h("ul", { class: "list" }, sets.map(s => {
+          const locked = s.boards.filter(b => b.locked).length;
+          return h("li", {},
+            h("div", {}, h("a", { href: "#/s/" + s.id }, s.name),
+              h("div", { class: "meta" }, countOf(s.boards.length, "board") + (locked ? `, ${locked} locked` : ""))),
+            mg && btn("Delete", () => deleteSet(s), "danger"));
+        }))
+      : h("p", { class: "empty" }, mg ? "Add a board set for each game day this week, like Saturday or Sunday." : "No boards posted for this week yet."),
+    mg && h("div", { class: "actions", style: "margin-top:28px" }, btn("Delete week", () => deleteWeek(w), "danger"))
+  );
+}
+
+async function newSet(w) {
+  const v = await modal({ title: "New board set", text: `Group the boards for one game day in ${w.label}.`,
+    fields: [{ name: "name", label: "Set name", placeholder: "Saturday", required: true, maxlength: 80 }], ok: "Create set" });
+  if (!v || !v.name.trim()) return;
+  try {
+    const row = must(await sb.from("board_sets").insert({ community_id: w.community_id, week_id: w.id, name: v.name.trim() }).select().single());
+    go("#/s/" + row.id);
+  } catch (e) { toast(e.message, true); }
+}
+
+async function deleteSet(s) {
+  if (!await confirmBox("Delete board set?", `"${s.name}" and all its boards will be deleted.`, "Delete set")) return;
+  try {
+    const rows = must(await sb.from("board_sets").delete().eq("id", s.id).select());
+    if (!rows.length) return toast("This set has a locked board. Only the super admin can delete it.", true);
+    route();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function addAdmin(cid) {
+  const v = await modal({ title: "Add admin", text: "They need to create a login first using Admin sign in.",
+    fields: [{ name: "email", label: "Their login email", type: "email", required: true }], ok: "Add admin" });
+  if (!v) return;
+  try {
+    const uid = must(await sb.rpc("find_user_by_email", { e: v.email }));
+    if (!uid) return toast("No login found for that email. Have them create one first.", true);
+    const { error } = await sb.from("community_admins").insert({ community_id: cid, user_id: uid });
+    if (error && error.code !== "23505") throw new Error(error.message);
+    route();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function removeAdmin(cid, a) {
+  if (!await confirmBox("Remove admin?", `${a.profiles?.email || "This person"} will lose edit access to this community.`, "Remove admin")) return;
+  try { must(await sb.from("community_admins").delete().eq("community_id", cid).eq("user_id", a.user_id)); route(); }
+  catch (e) { toast(e.message, true); }
+}
+
+async function deleteCommunity(c) {
+  const v = await modal({ title: "Delete community?", text: `Every board set and board in "${c.name}" will be deleted. Type the community name to confirm.`,
+    fields: [{ name: "name", label: "Community name" }], ok: "Delete community", okClass: "danger" });
+  if (!v) return;
+  if (v.name.trim() !== c.name) return toast("Name didn't match. Nothing was deleted.", true);
+  try { must(await sb.from("communities").delete().eq("id", c.id)); go("#/"); }
+  catch (e) { toast(e.message, true); }
+}
+
+async function viewSet(id) {
+  const set = must(await sb.from("board_sets").select("id,name,community_id,week_id,communities(name),weeks(id,label,league,season,sort_key)").eq("id", id).maybeSingle());
+  if (!set) throw new Error("Board set not found. Check the link.");
+  const boards = must(await sb.from("boards").select("*").eq("set_id", id)
+    .order("sort_order").order("created_at"));
+  const mg = canManage(set.community_id);
+  const wk = set.weeks || {};
+  render(
+    h("div", { class: "crumbs" },
+      mg && [h("a", { href: "#/c/" + set.community_id }, set.communities?.name || "Community"), " › "],
+      h("a", { href: "#/w/" + set.week_id }, wk.label || "Game week")),
+    h("h1", {}, set.name),
+    h("p", { class: "sub" }, wk.league ? `${wk.label}, ${wk.league} ${seasonLabel(wk.league, wk.season)}` : ""),
+    h("div", { class: "actions" },
+      btn("Copy set link", () => copy(link("#/s/" + id))),
+      mg && btn("Add board", () => addBoard(set, boards.length), "primary")),
+    boards.length ? boards.map(b => boardBlock(b, mg, { ...set.weeks })) : h("p", { class: "empty" }, mg ? "Add a board for each game in this set." : "No boards posted yet.")
+  );
+}
+
+async function viewBoard(id) {
+  const b = must(await sb.from("boards").select("*, board_sets(id,name,community_id,week_id)").eq("id", id).maybeSingle());
+  if (!b) throw new Error("Board not found. Check the link.");
+  const mg = canManage(b.board_sets.community_id);
+  const wk = must(await sb.from("weeks").select("*").eq("id", b.board_sets.week_id).maybeSingle());
+  render(
+    h("div", { class: "crumbs" }, h("a", { href: "#/s/" + b.board_sets.id }, b.board_sets.name)),
+    boardBlock(b, mg, wk || undefined)
+  );
+}
+
+/* ---------- Team color lookup ----------
+   [name, mascot or league, primary color, secondary color, [other names]]
+   Official brand colors for power-conference schools, Notre Dame, Alabama schools and
+   major HBCUs; other colleges from the public cfbfastR team list; NFL from nflverse. */
+const TEAMS = [["Abilene Christian","Wildcats","#4e2683","#ebebeb",["ACU","Abil Christian"]],["Adams State","Grizzlies","#000000","",["ADST","Adams St"]],["Adrian","Bulldogs","#000000","",["ADR"]],["Air Force","Falcons","#004a7b","#ffffff",["AFA"]],["Akron","Zips","#00285e","#84754e",["AKR"]],["Alabama","Crimson Tide","#9e1b32","#828a8f",["ALA"]],["Alabama A&M","Bulldogs","#660000","#ffffff",["AAMU"]],["Alabama State","Hornets","#000000","#c99700",["ALST"]],["Albany","Great Danes","#3d2777","#ffffff",["ALBY"]],["Albany State (GA)","Golden Rams","#000000","",["ALB","Albany St (GA)"]],["Albion","Britons","#000000","",["ALBI"]],["Albright","Lions","#000000","",["ALB"]],["Alcorn State","Braves","#46166b","#e9a900",["ALCN"]],["Alfred","Saxons","#000000","",["ALF"]],["Alfred State College","Pioneers","#000000","",["ASC","Alfred St"]],["Allegheny","Golden Gators","#000000","",["ALL"]],["Alma College","Scots","#000000","",["ALM"]],["American International","Yellow Jackets","#000000","",["AIC","American Intl."]],["Amherst College","Mammoths","#000000","",["AMH","Amherst"]],["Anderson (IN)","Ravens","#000000","",["AND"]],["Angelo State","Rams","#000000","",["ANG","Angelo St"]],["Anna Maria College","Amcats","#000000","",["ANN","Anna Maria"]],["Appalachian State","Mountaineers","#000000","#ffcd00",["APP","Appalachian St"]],["Apprentice School","Builders","#000000","",["APP"]],["Arizona","Wildcats","#cc0033","#003366",["ARIZ"]],["Arizona Cardinals","NFL","#97233f","#000000",["Cardinals","ARI"]],["Arizona State","Sun Devils","#8c1d40","#ffc627",["ASU"]],["Arkansas","Razorbacks","#9d2235","#ffffff",["ARK"]],["Arkansas State","Red Wolves","#e81018","#000000",["ARST"]],["Arkansas Tech","Wonder Boys","#000000","",["ARK"]],["Arkansas-Monticello","Weevils","#000000","",["ARK","AR-Monticello"]],["Arkansas-Pine Bluff","Golden Lions","#e0aa0f","#eaaa00",["UAPB","AR-Pine Bluff"]],["Army","Black Knights","#ce9c00","#231f20",["ARMY"]],["Ashland","Eagles","#000000","",["ASH"]],["Assumption","Greyhounds","#000000","",["ASP"]],["Atlanta Falcons","NFL","#a71930","#000000",["Falcons","ATL"]],["Auburn","Tigers","#0c2340","#e87722",["AUB"]],["Augsburg","Auggies","#000000","",["AUG"]],["Augustana (IL)","Vikings","#000000","",["AUG"]],["Augustana (SD)","Vikings","#000000","",["AUG"]],["Aurora","Spartans","#000000","",["AUR"]],["Austin College","Kangaroos","#000000","",["AUS"]],["Austin Peay","Governors","#8e0b0b","",["PEAY"]],["Ave Maria","Gyrenes","#000000","",["AMU"]],["Averett","Cougars","#000000","",["AVE"]],["Avila College","Eagles","#000000","",["AVC"]],["Azusa Pacific","Cougars","#000000","",["AZU"]],["Baker University","Wildcats","#000000","",["BAK","Baker U"]],["Baldwin-Wallace","Yellow Jackets","#000000","",["BAL"]],["Ball State","Cardinals","#da0000","#ffffff",["BALL"]],["Baltimore Ravens","NFL","#241773","#9e7c0c",["Ravens","BAL"]],["Bates College","Bobcats","#000000","",["BAT","Bates"]],["Baylor","Bears","#154734","#ffb81c",["BAY"]],["Becker College","Hawks","#000000","",["BEC"]],["Belhaven College","Blazers","#000000","",["BEL","Belhaven"]],["Beloit College","Buccaneers","#000000","",["BEL","Beloit"]],["Bemidji State","Beavers","#000000","",["BEM"]],["Benedict","Tigers","#000000","",["BEN"]],["Benedictine (IL)","Eagles","#000000","",["BEN"]],["Bentley","Falcons","#000000","",["BENT"]],["Bethany (KS)","Swedes","#000000","",["BET"]],["Bethany (WV)","Bison","#000000","",["BET"]],["Bethel (MN)","Royals","#000000","",["BET"]],["Bethel (TN)","Wildcats","#000000","",["BET"]],["Bethune-Cookman","Wildcats","#6c1d45","#f2a900",["BCU"]],["Birmingham-Southern","Panthers","#000000","",["BIR"]],["Black Hills State","Yellow Jackets","#000000","",["BLA","Black Hills St"]],["Blackburn","Beavers","#000000","",["BLA"]],["Bloomsburg","Huskies","#000000","",["BLO"]],["Bluffton","Beavers","#000000","",["BLU"]],["Boise State","Broncos","#09347a","#d8d9da",["BSU"]],["Boston College","Eagles","#8a100b","#bc9b6a",["BC"]],["Bowdoin","Polar Bears","#000000","",["BOW"]],["Bowie State","Bulldogs","#000000","",["BOW","Bowie St"]],["Bowling Green","Falcons","#2b1000","#492000",["BGSU","Bowling Green State"]],["Brevard College","Tornados","#000000","",["BRE","Brevard"]],["Bridgewater (VA)","Eagles","#000000","",["BRD"]],["Bridgewater State","Bears","#000000","",["BGW","Bridgewater St"]],["Brit Columbia","Thunderbirds","#000000","",["BBM"]],["Brockport State (NY)","Golden Eagles","#000000","",["BRO","Brockport St (NY)"]],["Brown","Bears","#411e09","#949300",["BRWN"]],["Bryant","Bulldogs","#000000","#9f8343",["BRY"]],["Bucknell","Bison","#000060","#00316e",["BUCK"]],["Buena Vista","Beavers","#000000","",["BUE"]],["Buffalo","Bulls","#041a9b","#ebebeb",["BUFF"]],["Buffalo Bills","NFL","#00338d","#c60c30",["Bills","BUF"]],["Buffalo State","Bengals","#000000","",["BUF","Buffalo St"]],["Butler","Bulldogs","#0d1361","#00a3e0",["BUT"]],["BYU","Cougars","#002e5d","#ffffff",["Brigham Young"]],["Cal Lutheran","Kingsmen","#000000","",["CAL","California Lutheran"]],["Cal Poly","Mustangs","#1e4d2b","#eed897",["CP"]],["California","Golden Bears","#003262","#fdb515",["CAL","Cal"]],["California (PA)","Vulcans","#000000","",["CAL"]],["Campbell","Camels","#000000","",["CAMP"]],["Capital","Crusaders","#000000","",["CAP"]],["Carleton","Knights","#000000","",["CAR"]],["Carnegie Mellon","Tartans","#000000","",["CAR"]],["Carolina Panthers","NFL","#0085ca","#000000",["Panthers","CAR"]],["Carroll (WI)","Pioneers","#000000","",["CAR"]],["Carson-Newman","Eagles","#000000","",["CNEW"]],["Carthage","Redmen","#000000","",["CAR"]],["Case Western Reserve","Spartans","#000000","",["CSR","Case West Reserve"]],["Castleton State College","Spartans","#000000","",["CAS","Castleton St"]],["Catawba","Indians","#000000","",["CAT"]],["Catholic University","Cardinals","#000000","",["CATH","Catholic Univ."]],["Central","Dutch","#000000","",["CEN"]],["Central Arkansas","Bears","#a7a9ac","#8e959a",["UCA","Cent Arkansas"]],["Central Connecticut","Blue Devils","#1b49a2","#d1d5d8",["CCSU","Central Connecticut State","Cent Conn St"]],["Central Methodist","Eagles","#000000","",["CDF","Cent Methodist"]],["Central Michigan","Chippewas","#6a0032","#ffffff",["CMU","Cent Michigan"]],["Central Missouri State","Mules","#000000","",["CEN","Cent Missouri St"]],["Central Oklahoma","Bronchos","#000000","",["CEN","Cent Oklahoma"]],["Central State","Marauders","#000000","",["CCI","Central St"]],["Central Washington","Wildcats","#000000","",["CEN","Cent Washington"]],["Centre","Colonels","#000000","",["CEN"]],["Chadron State","Eagles","#000000","",["CHA","Chadron St"]],["Chapman","Panthers","#000000","",["CHA"]],["Charleston (WV)","Golden Eagles","#000000","",["CHA"]],["Charleston Southern","Buccaneers","#2e3192","#ded090",["CHSO","Charleston So"]],["Charlotte","49ers","#0c562d","#cfab7a",["CHAR"]],["Chattanooga","Mocs","#00386b","#dca71d",["CHAT"]],["Cheyney","Wolves","#000000","",["CHE"]],["Chicago","Maroons","#000000","",["CHI"]],["Chicago Bears","NFL","#0b162a","#e64100",["Bears","CHI"]],["Chowan","Braves","#000000","",["CHO"]],["Christopher Newport","Captains","#000000","",["CHR"]],["Cincinnati","Bearcats","#e00122","#000000",["CIN"]],["Cincinnati Bengals","NFL","#fb4f14","#000000",["Bengals","CIN"]],["Claremont","Stags","#000000","",["CLA"]],["Clarion","Golden Eagles","#000000","",["CLA"]],["Clark Atlanta","Panthers","#000000","",["CLK"]],["Clemson","Tigers","#f56600","#522d80",["CLEM"]],["Cleveland Browns","NFL","#ff3c00","#311d00",["Browns","CLE"]],["Coast Guard","Bears","#000000","",["COA"]],["Coastal Carolina","Chanticleers","#007073","#876447",["CCU","C. Carolina"]],["Coe","Kohawks","#000000","",["COE","Coe College"]],["Colby","White Mules","#000000","",["COL"]],["Colgate","Raiders","#8b011d","#231f20",["COLG"]],["College of New Jersey","Lions","#000000","",["CNJ","College of NJ"]],["Colorado","Buffaloes","#cfb87c","#000000",["COLO"]],["Colorado College","Tigers","#000000","",["COL"]],["Colorado Mesa","Mavericks","#000000","",["MESA"]],["Colorado Mines","Orediggers","#000000","",["COL"]],["Colorado State","Rams","#004537","#ffc425",["CSU"]],["Colorado State-Pueblo","Thunderwolves","#000000","",["CSUP","Colorado St-Pueblo"]],["Columbia","Lions","#174785","#004b85",["CLMB"]],["Concord","Mountain Lions","#000000","",["CON"]],["Concordia (IL)","Cougars","#000000","",["CON"]],["Concordia (MN)","Cobbers","#000000","",["CON"]],["Concordia (WI)","Falcons","#000000","",["CON"]],["Concordia College (MI)","Cardinals","#000000","",["CMI","Concordia  (MI)"]],["Concordia-St. Paul","Golden Bears","#000000","",["CON"]],["Connecticut","Huskies","#001d40","#f1f2f3",["CONN","UConn"]],["Cornell","Big Red","#d60027","#101010",["COR"]],["Cornell College (IA)","Rams","#000000","",["COR","Cornell College","Cornell  (IA)"]],["Crown College","Storm","#000000","",["CRO"]],["Cumberland College","Indians","#000000","",["CUM","Cumberland"]],["Curry","Colonels","#000000","",["CUR"]],["Dakota State","Trojans","#000000","",["DSU","Dakota St"]],["Dallas Cowboys","NFL","#002244","#b0b7bc",["Cowboys","DAL"]],["Dartmouth","Big Green","#005730","#000000",["DART"]],["Davidson","Wildcats","#000000","#e51837",["DAV"]],["Dayton","Flyers","#004b8d","#ffffff",["DAY"]],["Defiance","Yellow Jackets","#000000","",["DEF"]],["Delaware","Blue Hens","#033594","#e8ce31",["DEL"]],["Delaware State","Hornets","#ff3630","#009cdd",["DSU"]],["Delaware Valley","Aggies","#000000","",["DV"]],["Delta State","Statesmen","#000000","",["DEL","Delta St"]],["Denison","Big Red","#000000","",["DEN"]],["Denver Broncos","NFL","#002244","#fb4f14",["Broncos","DEN"]],["DePauw","Tigers","#000000","",["DEP"]],["Detroit Lions","NFL","#0076b6","#b0b7bc",["Lions","DET"]],["Dickinson","Red Devils","#000000","",["DIC"]],["Dickinson State","Blue Hawks","#000000","",["DIC","Dickinson St"]],["Dixie State","Red Storm","#000000","",["DIX","Dixie St"]],["Drake","Bulldogs","#004477","#c0c0c0",["DRKE"]],["Dubuque","Spartans","#000000","",["DUB"]],["Duke","Blue Devils","#003087","#ffffff",["DUKE"]],["Duquesne","Dukes","#002d62","#b90b2e",["DUQ"]],["Earlham","Quakers","#000000","",["EAR"]],["East Carolina","Pirates","#4b1869","#f0907b",["ECU"]],["East Central","Tigers","#000000","",["EAS"]],["East Stroudsburg","Warriors","#000000","",["EAS","E Stroudsburg"]],["East Tennessee State","Buccaneers","#002d61","#ffc423",["ETSU"]],["East Texas Baptist","Tigers","#000000","",["EAS","E Texas Baptist"]],["Eastern Illinois","Panthers","#000000","#bebab9",["EIU","E Illinois"]],["Eastern Kentucky","Colonels","#660819","#f0f0f0",["EKY","E Kentucky"]],["Eastern Michigan","Eagles","#00331b","#f0f0f0",["EMU","E Michigan"]],["Eastern New Mexico","Greyhounds","#000000","",["EAS","E New Mexico"]],["Eastern Washington","Eagles","#a10022","#abb4bc",["EWU","E Washington"]],["Edinboro","Fighting Scots","#000000","",["EDI"]],["Elizabeth City State","Vikings","#000000","",["ELI","Elizabeth City St"]],["Elmhurst","Blue Jays","#000000","",["ELM"]],["Elon","Phoenix","#020303","#b59a57",["ELON"]],["Emory & Henry","Wasps","#000000","",["EMO"]],["Emporia State","Hornets","#000000","",["EMP","Emporia St"]],["Endicott College","Gulls","#000000","",["END","Endicott"]],["Eureka College","Red Devils","#000000","",["EUR"]],["Fairmont State","Falcons","#000000","",["FAI","Fairmont St"]],["Faulkner","Eagles","#000000","",["FAU"]],["Fayetteville State","Broncos","#000000","",["FAY","Fayetteville St"]],["FDU-Florham","Devils","#000000","",["FDU"]],["Ferris State","Bulldogs","#000000","",["FER","Ferris St"]],["Ferrum","Panthers","#000000","",["FER"]],["Findlay","Oilers","#000000","",["FIN"]],["Fitchburg State","Falcons","#000000","",["FIT","Fitchburg St"]],["Florida","Gators","#0021a5","#fa4616",["FLA"]],["Florida A&M","Rattlers","#f47920","#006b3f",["FAMU"]],["Florida Atlantic","Owls","#004b85","#bb2f4c",["FAU"]],["Florida International","Golden Panthers","#001538","#c5960c",["FIU"]],["Florida State","Seminoles","#782f40","#ceb888",["FSU"]],["Florida Tech","Panthers","#000000","",["FLTH"]],["Fordham","Rams","#830032","#909090",["FOR"]],["Fort Hays State","Tigers","#000000","",["FHSU","Fort Hays St"]],["Fort Lewis","Skyhawks","#000000","",["FOR"]],["Fort Valley State","Wildcats","#000000","",["FOR","Fort Valley St"]],["Framingham State","Rams","#000000","",["FRA","Framingham St"]],["Franklin","Grizzlies","#000000","",["FRA"]],["Franklin & Marshall","Diplomats","#000000","",["F&M"]],["Fresno State","Bulldogs","#c41230","#231f20",["FRES"]],["Frostburg State","Bobcats","#000000","",["FRO","Frostburg St"]],["Furman","Paladins","#4a2184","#909090",["FUR"]],["Gallaudet","Bison","#000000","",["GAL"]],["Gannon","Golden Knights","#000000","",["GAN"]],["Gardner-Webb","Bulldogs","#c12535","#909090",["WEBB"]],["Geneva College","Golden Tornadoes","#000000","",["GEN"]],["George Mason","Patriots","#016600","#ecb010",["GMU"]],["Georgetown","Hoyas","#110e42","#001c58",["GTWN"]],["Georgia","Bulldogs","#ba0c2f","#000000",["UGA"]],["Georgia Southern","Eagles","#003775","#f0f0f0",["GASO","Ga Southern"]],["Georgia State","Panthers","#1e539a","#ebebeb",["GAST"]],["Georgia Tech","Yellow Jackets","#b3a369","#003057",["GT"]],["Gettysburg","Bullets","#000000","",["GET"]],["Glenville State","Pioneers","#000000","",["GLE","Glenville St"]],["Graceland University","Yellowjackets","#000000","",["GRC"]],["Grambling","Tigers","#000000","#fdb913",["GRAM","Grambling State"]],["Grand Valley State","Lakers","#000000","",["GVSU","Grand Valley St"]],["Green Bay Packers","NFL","#203731","#ffb612",["Packers","GB"]],["Greensboro","Pride","#000000","",["GRN"]],["Greenville","Panthers","#000000","",["GRE"]],["Grinnell","Pioneers","#000000","",["GRI"]],["Grove City College","Wolverines","#000000","",["GRO","Grove City"]],["Guilford","Quakers","#000000","",["GUI"]],["Gustavus Adolphus","Golden Gusties","#000000","",["GUS"]],["Hamilton","Continentals","#000000","",["HAM"]],["Hamline","Fighting Pipers","#000000","",["HAM"]],["Hampden-Sydney","Tigers","#000000","",["HAM"]],["Hampton","Pirates","#0067ac","",["HAMP"]],["Hanover","Panthers","#000000","",["HAN"]],["Hardin-Simmons","Cowboys","#000000","",["HAR"]],["Harding","Bison","#000000","",["HAR"]],["Hartwick","Hawks","#000000","",["HAR"]],["Harvard","Crimson","#990000","#dbdbdb",["HARV"]],["Haskell Indian Nations","Jayhawks","#000000","",["HAS","Haskell Indian Natio"]],["Hawai'i","Rainbow Warriors","#003420","#ffffff",["HAW"]],["Heidelberg","Student Princes","#000000","",["HEI"]],["Henderson State","Reddies","#000000","",["HEN","Henderson St"]],["Hillsdale","Chargers","#000000","",["HIL"]],["Hiram","Terriers","#000000","",["HIR"]],["Hobart","Statesmen","#000000","",["HOB"]],["Hofstra","Pride","#27297c","#f6c934",["HOF"]],["Holy Cross","Crusaders","#0a0a0a","#080808",["HC"]],["Hope","Flying Dutchmen","#000000","",["HOP"]],["Houston","Cougars","#c8102e","#ffffff",["HOU"]],["Houston Baptist","Huskies","#00539c","",["HBU"]],["Houston Texans","NFL","#03202f","#a71930",["Texans","HOU"]],["Howard","Bison","#003a63","#e51937",["HOW"]],["Howard Payne","Yellow Jackets","#000000","",["HOW"]],["Humboldt State","Lumberjacks","#000000","",["HUM","Humboldt St"]],["Huntingdon","Hawks","#000000","",["HUN"]],["Husson","Eagles","#000000","",["HUS"]],["Idaho","Vandals","#000000","#8c6e4a",["IDHO"]],["Idaho State","Bengals","#ef8c00","#e9a126",["IDST"]],["Illinois","Fighting Illini","#e84a27","#13294b",["ILL"]],["Illinois College","Blueboys","#000000","",["ILLC"]],["Illinois State","Redbirds","#ce1126","#ffe716",["ILST"]],["Illinois Wesleyan","Titans","#000000","",["ILL"]],["Incarnate Word","Cardinals","#000000","#080808",["IW"]],["Indiana","Hoosiers","#990000","#eeedeb",["IND"]],["Indiana (PA)","Crimson Hawks","#000000","",["IND"]],["Indiana State","Sycamores","#00669a","#f0f0f0",["INST"]],["Indianapolis","Greyhounds","#000000","",["IND"]],["Indianapolis Colts","NFL","#002c5f","#a5acaf",["Colts","IND"]],["Iowa","Hawkeyes","#ffcd00","#000000",["IOWA"]],["Iowa State","Cyclones","#c8102e","#f1be48",["ISU"]],["Iowa Wesleyan","Tigers","#000000","",["IOW"]],["Ithaca","Bombers","#000000","",["ITH"]],["Jackson State","Tigers","#002147","#ffffff",["JKST"]],["Jacksonville","Dolphins","#00523e","",["JAC"]],["Jacksonville Jaguars","NFL","#006778","#000000",["Jaguars","JAX"]],["Jacksonville State","Gamecocks","#cc0000","#ffffff",["JVST","Jacksonville St"]],["James Madison","Dukes","#450084","#cbb778",["JMU"]],["Jamestown","Jimmies","#000000","",["JAM"]],["John Carroll","Blue Streaks","#000000","",["JOH"]],["Johns Hopkins","Blue Jays","#000000","",["JOH"]],["Johnson C Smith","Golden Bulls","#000000","",["JOH"]],["Juniata","Eagles","#000000","",["JUN"]],["Kalamazoo","Hornets","#000000","",["KAL"]],["Kansas","Jayhawks","#0051ba","#e8000d",["KU"]],["Kansas City Chiefs","NFL","#e31837","#ffb612",["Chiefs","KC"]],["Kansas State","Wildcats","#512888","#ffffff",["KSU"]],["Kansas Wesleyan University","Coyotes","#000000","",["KNW","Kansas Wesleyan U"]],["Kean","Cougars","#000000","",["KEA"]],["Kennesaw State","Owls","#000000","#fdbb30",["KENN","Kennesaw St"]],["Kent State","Golden Flashes","#002445","#f0b510",["KENT"]],["Kentucky","Wildcats","#0033a0","#ffffff",["UK"]],["Kentucky Christian","Knights","#000000","",["KCU"]],["Kentucky State","Thorobreds","#000000","",["KYS","Kentucky St"]],["Kentucky Wesleyan","Panthers","#000000","",["KYW"]],["Kenyon","Lords","#000000","",["KEN"]],["King's College (PA)","Monarchs","#000000","",["KIN","King's  (PA)"]],["Knox College","Prairie Fire","#000000","",["KNO","Knox"]],["Kutztown","Golden Bears","#000000","",["KUT"]],["La Verne","Leopards","#000000","",["LAV"]],["Lafayette","Leopards","#790000","#a59474",["LAF"]],["LaGrange College","Panthers","#000000","",["LAG","LaGrange"]],["Lake Erie College","Storm","#000000","",["LKE","Lake Erie"]],["Lake Forest","Foresters","#000000","",["LAK"]],["Lamar","Cardinals","#000000","#ebebeb",["LAM"]],["Lambuth","Eagles","#000000","",["LAM"]],["Lane","Dragons","#000000","",["LAN"]],["Las Vegas Raiders","NFL","#000000","#a5acaf",["Raiders","LV"]],["Lawrence","Vikings","#000000","",["LAW"]],["Lebanon Valley","Flying Dutchmen","#000000","",["LEB"]],["Lehigh","Mountain Hawks","#6c2b2a","#b69e70",["LEH"]],["Lenoir-Rhyne","Bears","#000000","",["LEN"]],["Lewis & Clark","Pioneers","#000000","",["LEW"]],["Liberty","Flames","#071740","#a61f21",["LIB"]],["Lincoln (MO)","Blue Tigers","#000000","",["LIN"]],["Lincoln (PA)","Lions","#000000","",["LIN"]],["Lindenwood","Lions","#000000","",["LIN"]],["Linfield","Wildcats","#000000","",["LIN"]],["LIU Post","Pioneers","#000000","",["LIU"]],["Livingstone","Blue Bears","#000000","",["LVI"]],["Lock Haven","Bald Eagles","#000000","",["LOC"]],["Loras College","Duhawks","#000000","",["LOR"]],["Los Angeles Chargers","NFL","#007bc7","#ffc20e",["Chargers","LAC"]],["Los Angeles Rams","NFL","#003594","#ffd100",["Rams","LAR"]],["Louisiana","Ragin' Cajuns","#ce2842","",["ULL","UL Lafayette"]],["Louisiana College","Wildcats","#000000","",["LAC","Louisiana"]],["Louisiana Monroe","Warhawks","#231f20","#b18445",["ULM","La.-Monroe","UL Monroe"]],["Louisiana Tech","Bulldogs","#002d65","#d3313a",["LT","LA Tech"]],["Louisville","Cardinals","#ad0000","#000000",["LOU"]],["LSU","Tigers","#461d7c","#fdd023",["Louisiana State"]],["Luther","Norse","#000000","",["LUT"]],["Lycoming","Warriors","#000000","",["LYC"]],["Macalester","Scots","#000000","",["MAC"]],["MacMurray College","Highlanders","#000000","",["MAC","MacMurray"]],["Maine","Black Bears","#127dbe","",["MAINE"]],["Maine Maritime","Mariners","#000000","",["MAI"]],["Malone","Pioneers","#000000","",["MAL"]],["Manchester","Spartans","#000000","",["MAN"]],["Manitoba","Bisons","#000000","",["MAN"]],["Mansfield","Mountaineers","#000000","",["MAN"]],["Maranatha Baptist College","Crusaders","#000000","",["MAR","Maranatha Baptist"]],["Marian","Knights","#000000","",["MAR"]],["Marietta","Pioneers","#000000","",["MAR"]],["Marist","Red Foxes","#e53730","#f0f0f0",["MRST"]],["Mars Hill","Lions","#000000","",["MAR"]],["Marshall","Thundering Herd","#186329","#be854c",["MRSH"]],["Martin Luther College","Knights","#000000","",["MAR","Martin Luther"]],["Mary Hardin-Baylor","Crusaders","#000000","",["MAR"]],["Maryland","Terrapins","#e03a3e","#ffd520",["MD"]],["Maryville TN","Fighting Scots","#000000","",["MAR","Maryville (TN)"]],["Mass Maritime","Buccaneers","#000000","",["MAS"]],["Mayville State","Comets","#000000","",["MAY","Mayville St"]],["McDaniel College","Terrors","#000000","",["MCD","McDaniel"]],["McKendree","Bearcats","#000000","",["MAN"]],["McMurry","War Hawks","#000000","",["MCM"]],["McNeese","Cowboys","#00529c","",["MCNS"]],["Memphis","Tigers","#002447","#231f20",["MEM"]],["Menlo","Oaks","#000000","",["MEN"]],["Mercer","Bears","#ff7f29","#080808",["MER"]],["Merchant Marine","Mariners","#000000","",["MER"]],["Mercyhurst","Lakers","#000000","",["MER"]],["Merrimack","Warriors","#000000","",["MER"]],["Methodist","Monarchs","#000000","",["MTH"]],["Miami","Hurricanes","#f47321","#005030",["MIAMI","Miami (FL)"]],["Miami (OH)","RedHawks","#a4000c","#f0f0f0",["M-OH"]],["Miami Dolphins","NFL","#008e97","#f58220",["Dolphins","MIA"]],["Michigan","Wolverines","#00274c","#ffcb05",["MICH"]],["Michigan State","Spartans","#18453b","#ffffff",["MSU"]],["Michigan Tech","Huskies","#000000","",["MIC"]],["Middle Tennessee","Blue Raiders","#0079c2","#c3c5c8",["MTSU","Middle Tennessee State","Mid Tennessee"]],["Middlebury","Panthers","#000000","",["MID"]],["Midland University","Warriors","#000000","",["MID","Midland U"]],["Midwestern State","Mustangs","#000000","",["MID","Midwest"]],["Miles","Golden Bears","#000000","",["MIL"]],["Millersville","Marauders","#000000","",["MIL"]],["Millikin","Big Blue","#000000","",["MIL"]],["Millsaps","Majors","#000000","",["MIL"]],["Minnesota","Golden Gophers","#7a0019","#ffcc33",["MINN"]],["Minnesota St-Moorhead","Dragon","#000000","",["MOO","Minn St-Moorhead"]],["Minnesota State","Mavericks","#000000","",["MNST","Minnesota St"]],["Minnesota Vikings","NFL","#4f2683","#ffc62f",["Vikings","MIN"]],["Minnesota-Crookston","Golden Eagles","#000000","",["MIN"]],["Minnesota-Duluth","Bulldogs","#000000","",["MNDU"]],["Minnesota-Morris","Cougars","#000000","",["MIN"]],["Minot State","Beavers","#000000","",["MIN","Minot St"]],["Misericordia","Cougars","#000000","",["MISC"]],["Mississippi College","Choctaws","#000000","",["MIS","Miss. College"]],["Mississippi State","Bulldogs","#660000","#ffffff",["MSST","Miss St"]],["Mississippi Valley State","Delta Devils","#005328","#cf2d34",["MVSU","Miss Valley St"]],["Missouri","Tigers","#f1b82d","#000000",["MIZ"]],["Missouri S&T","Miners","#000000","",["S&T"]],["Missouri Southern State","Lions","#000000","",["MOS","Missouri South St"]],["Missouri State","Bears","#5f0000","#e8e8e8",["MOST"]],["Missouri Western","Griffons","#000000","",["MOW","Missouri West"]],["MIT","Engineers","#000000",""],["Monmouth","Hawks","#051844","",["MONM"]],["Monmouth (IL)","Fighting Scots","#000000","",["MON"]],["Montana","Grizzlies","#751d4a","#666666",["MONT"]],["Montana State","Bobcats","#003875","#bf965c",["MTST"]],["Montana-Western","Bulldogs","#000000","",["MWST"]],["Montclair State","Red Hawks","#000000","",["MON","Montclair St"]],["Monterrey Tech","Rams","#000000","",["MON"]],["Moravian","Greyhounds","#000000","",["MOR"]],["Morehead State","Eagles","#094fa3","#fed91a",["MORE"]],["Morehouse","Tigers","#000000","",["MOR"]],["Morgan State","Bears","#014786","#f47937",["MORG"]],["Morningside","Chiefs","#000000","",["MAO"]],["Morrisville State","Mustangs","#000000","",["MOR","Morrisville St"]],["Mount Ida College","Mustangs","#000000","",["MOU","Mount Ida"]],["Mount St. Joseph","Lions","#000000","",["MTS"]],["Mount Union","Raiders","#000000","",["MTU"]],["Muhlenberg","Mules","#000000","",["MUH"]],["Murray State","Racers","#002148","#000e00",["MURR"]],["Muskingum","Muskies","#000000","",["MUS"]],["Navy","Midshipmen","#131630","#b6a77c",["NAVY"]],["NC State","Wolfpack","#cc0000","#000000",["NCST","North Carolina St."]],["NC Wesleyan","Battling Bishops","#000000","",["UNCW","UNC Welseyan"]],["Nebraska","Cornhuskers","#e41c38","#f5f1e7",["NEB"]],["Nebraska-Kearney","Lopers","#000000","",["NEB"]],["Nebraska-Omaha","Mavericks","#e3193e","",["UNO","Omaha"]],["Nevada","Wolf Pack","#153e5f","#8e9295",["NEV"]],["New England Patriots","NFL","#002244","#c60c30",["Patriots","NE"]],["New Hampshire","Wildcats","#004990","#c3c4c6",["UNH"]],["New Haven","Chargers","#000000","",["NH"]],["New Mexico","Lobos","#000000","#231f20",["UNM"]],["New Mexico Highlands","Cowboys","#000000","",["NMH"]],["New Mexico State","Aggies","#891216","#000000",["NMSU","New Mexico St"]],["New Orleans Saints","NFL","#d3bc8d","#000000",["Saints","NO"]],["New York Giants","NFL","#0b2265","#a71930",["Giants","NYG"]],["New York Jets","NFL","#003f2d","#000000",["Jets","NYJ"]],["Newberry","Wolves","#000000","",["NBY"]],["Nicholls","Colonels","#c41230","#f0f0f0",["NICH"]],["Nichols","Bison","#000000","",["NIC"]],["Norfolk State","Spartans","#046546","",["NSU"]],["North Alabama","Lions","#000000","",["NOR"]],["North Carolina","Tar Heels","#7bafd4","#13294b",["UNC"]],["North Carolina A&T","Aggies","#004684","#fdb927",["NCAT","NC A&T"]],["North Carolina Central","Eagles","#880023","#c2c3c0",["NCCU","NC Central"]],["North Central","Cardinals","#000000","",["NOC"]],["North Dakota","Fighting Hawks","#00a26b","#c2c3c0",["UND"]],["North Dakota State","Bison","#01402a","#ffffff",["NDSU","North Dakota St"]],["North Greenville","Crusaders","#000000","",["NGR","N Greenville"]],["North Park","Vikings","#000000","",["NOR"]],["North Texas","Mean Green","#00853d","#000000",["UNT"]],["Northeastern","Huskies","#cc0001","#c2c3c0",["NE"]],["Northeastern State","RiverHawks","#000000","",["NEO","NE St"]],["Northern Arizona","Lumberjacks","#003976","#1b3069",["NAU","N Arizona"]],["Northern Colorado","Bears","#13558d","#ffc533",["UNCO","N Colorado"]],["Northern Illinois","Huskies","#f1122c","#cc0000",["NIU","N Illinois"]],["Northern Iowa","Panthers","#473282","#ffffff",["UNI"]],["Northern Michigan","Wildcats","#000000","",["NOR","N Michigan"]],["Northern State","Wolves","#000000","",["NOR","Northern St"]],["Northwest Missouri State","Bearcats","#000000","",["NWMS","NW Missouri St"]],["Northwestern","Wildcats","#4e2a84","#ffffff",["NW"]],["Northwestern (MN)","Eagles","#000000","",["NWM","NW (MN)"]],["Northwestern Oklahoma State","Rangers","#000000","",["NWO","NW Oklahoma St"]],["Northwestern State","Demons","#492f91","#ed6118",["NWST","Northwestern St"]],["Northwood (MI)","Timberwolves","#000000","",["NAR","Northwood"]],["Norwich","Cadets","#000000","",["NOR"]],["Notre Dame","Fighting Irish","#0c2340","#c99700",["ND"]],["Notre Dame College","Blue Falcons","#000000","",["NOT"]],["Oberlin","Yeomen","#000000","",["OBE"]],["Occidental","Tigers","#000000","",["OCC"]],["Ohio","Bobcats","#295a29","#e4bb85",["OHIO"]],["Ohio Northern","Polar Bears","#000000","",["ON"]],["Ohio State","Buckeyes","#bb0000","#666666",["OSU"]],["Ohio State Newark","Titans","#000000","",["OSU","Ohio St Newark"]],["Ohio Wesleyan","Battling Bishops","#000000","",["OHI"]],["OK Panhandle St","Aggies","#000000","",["OKP"]],["Oklahoma","Sooners","#841617","#fdf9d8",["OKLA"]],["Oklahoma State","Cowboys","#ff7300","#000000",["OKST"]],["Old Dominion","Monarchs","#00507d","#a1d2f1",["ODU"]],["Ole Miss","Rebels","#ce1126","#14213d",["MISS"]],["Olivet College","Comets","#000000","",["OLI"]],["Oregon","Ducks","#154733","#fee123",["ORE"]],["Oregon State","Beavers","#c34500","#dea076",["ORST"]],["Otterbein","Cardinals","#000000","",["OTT"]],["Ouachita Baptist","Tigers","#000000","",["OUA"]],["Pace","Setters","#000000","",["PAC"]],["Pacific (OR)","Boxers","#000000","",["PAC"]],["Pacific Lutheran","Lutes","#000000","",["PAC"]],["Penn State","Nittany Lions","#041e42","#ffffff",["PSU"]],["Pennsylvania","Quakers","#082a74","#a6163d",["PENN","Penn"]],["Philadelphia Eagles","NFL","#004c54","#a5acaf",["Eagles","PHI"]],["Pittsburg State","Gorillas","#000000","",["PIT","Pittsburg St"]],["Pittsburgh","Panthers","#003594","#ffb81c",["PITT","Pitt"]],["Pittsburgh Steelers","NFL","#000000","#ffb612",["Steelers","PIT"]],["Plymouth State","Panthers","#000000","",["PLY","Plymouth St"]],["Pomona-Pitzer","Sagehens","#000000","",["POM"]],["Portland State","Vikings","#00311e","#ebebeb",["PRST"]],["Prairie View A&M","Panthers","#4f2d7f","#fdb913",["Prairie View","PVAM"]],["Presbyterian College","Blue Hose","#194896","#990134",["PRE","Presbyterian"]],["Presentation College","Saints","#000000","",["PRE","Presentation"]],["Princeton","Tigers","#ff9408","#080808",["PRIN"]],["Principia College","Panthers","#000000","",["PRI","Principia"]],["Puget Sound","Loggers","#000000","",["PUG"]],["Purdue","Boilermakers","#ceb888","#000000",["PUR"]],["Quincy","Hawks","#000000","",["QUI"]],["Randolph-Macon","Yellow Jackets","#000000","",["RAN"]],["Redlands","Bulldogs","#000000","",["RED"]],["Rensselaer","Engineers","#000000","",["REN"]],["Rhode Island","Rams","#3691c6","#5ab3e8",["URI"]],["Rhodes","Lynx","#000000","",["RHO"]],["Rice","Owls","#003d7d","#d1d5d8",["RICE"]],["Richmond","Spiders","#9e0712","#b90b2e",["RICH"]],["Ripon","Redhawks","#000000","",["RIPON"]],["Robert Morris","Colonials","#00214d","#a21d2b",["RMU"]],["Robert Morris (IL)","Eagles","#000000","",["RMU"]],["Rochester","Yellow Jackets","#000000","",["ROC"]],["Rockford","Regents","#000000","",["ROC"]],["Rose-Hulman","Engineers","#000000","",["ROS"]],["Rowan","Professors","#000000","",["ROWAN"]],["Rutgers","Scarlet Knights","#cc0033","#5f6a72",["RUTG"]],["Sacramento State","Hornets","#00573c","#cdb97d",["SAC","Sacramento St"]],["Sacred Heart","Pioneers","#a40012","#c29472",["SHU"]],["Saginaw Valley","Cardinals","#000000","",["SAG"]],["Salisbury","Sea Gulls","#000000","",["SAL"]],["Salve Regina","Seahawks","#000000","",["SAL"]],["Sam Houston State","Bearkats","#f78f1e","#f78e1e",["SHSU","Sam Houston"]],["Samford","Bulldogs","#005485","#bc0023",["SAM"]],["San Diego","Toreros","#2f99d4","#2f99d4",["USD"]],["San Diego State","Aztecs","#bf2c37","#a8996e",["SDSU"]],["San Francisco 49ers","NFL","#aa0000","#b3995d",["49ers","SF"]],["San José State","Spartans","#005893","#fdba31",["SJSU","San Jose St.","San Jose State"]],["Savannah State","Tigers","#280298","#f78f1e",["SAV"]],["Seattle Seahawks","NFL","#002244","#69be28",["Seahawks","SEA"]],["Seton Hill College","Griffins","#000000","",["SET","Seton Hill"]],["Sewanee Univ. of the South","Tigers","#000000","",["SEW","Sewanee","Sewanee University"]],["Shaw","Bears","#000000","",["SHA"]],["Shenandoah","Hornets","#000000","",["SHE"]],["Shepherd","Rams","#000000","",["SHE"]],["Shepherd Tech","Eagles","#000000","",["STC"]],["Shippensburg","Raiders","#000000","",["SHI"]],["Shorter","Hawks","#000000","",["SHO"]],["Siena Heights","Saints","#000000","",["SH"]],["Simon Fraser","Clansmen","#000000","",["SIM"]],["Simpson College","Storm","#000000","",["SIM","Simpson"]],["Sioux Falls","Cougars","#000000","",["SIO"]],["Slippery Rock","The Rock","#000000","",["SRU"]],["SMU","Mustangs","#cc0035","#354ca1",["Southern Methodist"]],["South Alabama","Jaguars","#00205b","#bf0d3e",["USA"]],["South Carolina","Gamecocks","#73000a","#000000",["SC"]],["South Carolina State","Bulldogs","#7d1315","#104897",["SCST","S Carolina St"]],["South Dakota","Coyotes","#cd1241","#f0f0f0",["SDAK"]],["South Dakota Mines","Hardrockers","#000000","",["SDA","SD Mines"]],["South Dakota State","Jackrabbits","#005dab","#c33139",["SDSU","South Dakota St"]],["South Florida","Bulls","#004a36","#231f20",["USF"]],["Southeast Missouri State","Redhawks","#cc0000","#080808",["SEMO","SE Missouri St"]],["Southeastern Louisiana","Lions","#007550","#dca008",["SELA","SE Louisiana"]],["Southeastern Oklahoma","Savage Storm","#000000","",["SEOS","SEOkla St"]],["Southeastern University","Fire","#000000","",["SEFL","Southeastern"]],["Southern","Jaguars","#004b97","#ffc82d",["SOU"]],["Southern Arkansas","Muleriders","#000000","",["SOU","S Arkansas"]],["Southern Connecticut State","Owls","#000000","",["SOU","S Conn St"]],["Southern Illinois","Salukis","#85283d","#c2c3c0",["SIU","S Illinois"]],["Southern Mississippi","Golden Eagles","#ffaa3c","#ffc423",["USM","Southern Miss"]],["Southern Nazarene","Crimson Storm","#000000","",["STN","S Nazarene"]],["Southern Utah","Thunderbirds","#d10000","#c2c3c0",["SUU"]],["Southern Virginia","Knights","#000000","",["SVA","S Virginia"]],["Southwest Baptist","Bearcats","#000000","",["SWB","SW Baptist"]],["Southwest Minnesota State","Mustangs","#000000","",["SWM","SW Minnesota St"]],["Southwestern Assemblies of God","Lions","#000000","",["SWA","SW Assemblies of God"]],["Southwestern College","Moundbuilders","#000000","",["SWC","SW"]],["Southwestern Oklahoma","Bulldogs","#000000","",["SWO","SW Oklahoma"]],["Springfield","Pride","#000000","",["SPR"]],["St Francis (PA)","Red Flash","#a20012","",["SFU","Saint Francis (PA)"]],["St Lawrence","Saints","#000000","",["STL"]],["St. Ambrose","Fighting Bees","#000000","",["STA"]],["St. Anselm","Hawks","#000000","",["STA"]],["St. Augustine's","Falcons","#000000","",["STA"]],["St. Cloud State","Huskies","#000000","",["STC","St. Cloud St"]],["St. Francis (IL)","Fighting Saints","#000000","",["SFIL","St Francis (IL)"]],["St. Francis (IN)","Cougars","#000000","",["SBP"]],["St. John Fisher","Cardinals","#000000","",["STJ"]],["St. Johns (MN)","Johnnies","#000000","",["STJ"]],["St. Norbert","Green Knights","#000000","",["STN"]],["St. Olaf College","Oles","#000000","",["STO","St. Olaf"]],["St. Paul's College","Tigers","#000000","",["STP","St. Paul's"]],["St. Peter's","Peacocks","#001555","",["SPU"]],["St. Scholastica","College of St. Scholastica","#000000","",["SS"]],["St. Thomas (MN)","Tommies","#000000","",["STMN"]],["St. Vincent","Bearcats","#000000","",["STV"]],["St. Xavier (IL)","Cougars","#000000","",["STX"]],["Stanford","Cardinal","#8c1515","#ffffff",["STAN"]],["Stephen F. Austin","Lumberjacks","#393996","#bec0c2",["SFA","Stephen F Austin","SF Austin"]],["Sterling College","Warriors","#000000","",["STC","Sterling"]],["Stetson","Hatters","#18581c","#d49d5d",["STET"]],["Stevenson","Mustangs","#000000","",["STU"]],["Stonehill","Chieftains","#000000","",["SBI"]],["Stony Brook","Seawolves","#990000","",["STON"]],["Sul Ross State","Lobos","#000000","",["SUL","Sul Ross St"]],["SUNY Cortland","Red Dragons","#000000","",["COR"]],["SUNY Maritime","Privateers","#000000","",["MAR"]],["Susquehanna","Crusaders","#000000","",["SUS"]],["Syracuse","Orange","#f76900","#000e54",["SYR"]],["Tampa Bay Buccaneers","NFL","#a71930","#322f2b",["Buccaneers","TB"]],["Tarleton State","Texans","#000000","",["TAR","Tarleton St"]],["Taylor","Trojans","#000000","",["TAY"]],["TCU","Horned Frogs","#4d1979","#a3a9ac",["Texas Christian"]],["Temple","Owls","#a80532","#a7a9ac",["TEM"]],["Tennessee","Volunteers","#ff8200","#ffffff",["TENN"]],["Tennessee State","Tigers","#383c84","#f0f0f0",["TNST","Tennessee St"]],["Tennessee Tech","Golden Eagles","#5a4099","#ffde00",["TNTC","Tenn Tech"]],["Tennessee Titans","NFL","#4495d2","#d50a0a",["Titans","TEN"]],["Texas","Longhorns","#bf5700","#ffffff",["TEX"]],["Texas A&M","Aggies","#500000","#ffffff",["TA&M"]],["Texas A&M-Commerce","Lions","#000000","",["TXA","TX A&M-Commerce"]],["Texas A&M-Kingsville","Javelinas","#000000","",["TXA"]],["Texas Lutheran","Bulldogs","#000000","",["TEX"]],["Texas Southern","Tigers","#6a0403","#ebebeb",["TXSO"]],["Texas State","Bobcats","#4e1719","#b4975a",["TXST"]],["Texas Tech","Red Raiders","#cc0000","#000000",["TTU"]],["The Citadel","Bulldogs","#002b5c","#f0f0f0",["CIT"]],["Thiel College","Tomcats","#000000","",["THI"]],["Thomas More","Saints","#000000","",["THO"]],["Tiffin","Dragons","#000000","",["TIF"]],["Toledo","Rockets","#00488f","#ffd51d",["TOL"]],["Towson","Tigers","#ffc229","",["TOWS"]],["Trine","Thunder","#000000","",["TRI"]],["Trinity (CT)","Bantams","#000000","",["TRI"]],["Trinity (IL)","Trojans","#000000","",["TRI"]],["Trinity (TX)","Tigers","#000000","",["TRI"]],["Troy","Trojans","#8a2432","#b3b5b8",["TROY"]],["Truman State","Bulldogs","#000000","",["TRU","Truman St"]],["Tufts","Jumbos","#000000","",["TUF"]],["Tulane","Green Wave","#005837","#3baf29",["TULN"]],["Tulsa","Golden Hurricane","#004371","#ee3b33",["TLSA"]],["Tusculum","Pioneers","#000000","",["TUS"]],["Tuskegee","Golden Tigers","#9e1b32","#c99700",["TUS"]],["UAB","Blazers","#1e6b52","#f4c300",["Alabama-Birmingham"]],["UC Davis","Aggies","#183563","#bc9305",["UCD","California-Davis"]],["UCF","Knights","#ba9b37","#000000",["Central Florida"]],["UCLA","Bruins","#2d68c4","#f2a900"],["UMass","Minutemen","#880007","",["UMASS"]],["UMass Dartmouth","Corsairs","#000000","",["MAS"]],["UMass Lowell","River Hawks","#000000","#cf1f2f",["UML"]],["UNC Pembroke","Braves","#000000","",["NCP"]],["Union","Dutchmen","#000000","",["UNI"]],["University of Mary","Marauders","#000000","",["MAR","U of Mary"]],["UNLV","Rebels","#000000","#c2c4c6",["Nevada-Las Vegas"]],["Upper Iowa","Peacocks","#000000","",["UI"]],["Urbana","Blue Knights","#000000","",["URB"]],["Ursinus","Bears","#000000","",["URS"]],["USC","Trojans","#990000","#ffc72c"],["UT Martin","Skyhawks","#ff6700","#102a5c",["UTM"]],["UT San Antonio","Roadrunners","#002a5c","#f47321",["UTSA","Texas-San Antonio"]],["Utah","Utes","#cc0000","#ffffff",["UTAH"]],["Utah State","Aggies","#003263","#949ca1",["USU"]],["UTEP","Miners","#002843","#ff6f12",["Texas-El Paso"]],["Utica","Pioneers","#000000","",["UTICA","Utica College"]],["UW-Oshkosh","Titans","#000000","",["WIS"]],["UW-River Falls","Falcons","#000000","",["WIS"]],["UW-Stout","Blue Devils","#000000","",["WIS"]],["UW-Whitewater","Warhawks","#000000","",["WISW"]],["Valdosta State","Blazers","#000000","",["VAL","Valdosta St"]],["Valley City State","Vikings","#000000","",["VAL","Valley City St"]],["Valparaiso","Crusaders","#794500","",["VALP"]],["Vanderbilt","Commodores","#866d4b","#000000",["VAN"]],["Villanova","Wildcats","#123d7c","#f0f0f0",["NOVA"]],["Virginia","Cavaliers","#232d4b","#f84c1e",["UVA"]],["Virginia State","Trojans","#000000","",["VIR","Virginia St"]],["Virginia Tech","Hokies","#630031","#cf4420",["VT"]],["Virginia Union","Panthers","#000000","",["VIR"]],["VMI","Keydets","#e52d37","#eec52b",["Virginia Military Institute"]],["Wabash College","Little Giants","#000000","",["WAB","Wabash"]],["Wagner","Seahawks","#00483a","#ffffff",["WAG"]],["Wake Forest","Demon Deacons","#9e7e38","#000000",["WAKE"]],["Waldorf","Warriors","#000000","",["WAL"]],["Walsh","Cavaliers","#000000","",["WALSH"]],["Wartburg","Knights","#000000","",["WAR"]],["Washburn","Ichabods","#000000","",["WAS"]],["Washington","Huskies","#4b2e83","#b7a57a",["WASH"]],["Washington & Jefferson","Presidents","#000000","",["WAS","W&J"]],["Washington & Lee","Generals","#000000","",["UWL","Wash. & Lee"]],["Washington (MO)","Bears","#000000","",["WAS"]],["Washington Commanders","NFL","#5a1414","#ffb612",["Commanders","WAS"]],["Washington State","Cougars","#94022a","#6a747c",["WSU","Washington St"]],["Wayne State (MI)","Warriors","#000000","",["WAY","Wayne St (MI)"]],["Wayne State (NE)","Wildcats","#000000","",["WAY","Wayne St (NE)"]],["Waynesburg","Yellow Jackets","#000000","",["WAY"]],["Webber International","Warriors","#bf2f38","#909090",["WEBB","Webber College"]],["Weber State","Wildcats","#18005a","#ebebeb",["WEB"]],["Wesley College","Wolverines","#000000","",["WES"]],["Wesleyan","Cardinals","#000000","",["WES"]],["West Alabama","Tigers","#000000","",["WES"]],["West Chester","Golden Rams","#000000","",["WES"]],["West Georgia","Wolves","#000000","",["WES"]],["West Liberty","Hilltoppers","#000000","",["WES"]],["West Texas A&M","Buffaloes","#000000","",["WES"]],["West Virginia","Mountaineers","#002855","#eaaa00",["WVU"]],["West Virginia Tech","Golden Bears","#000000","",["WVT","W Virginia Tech"]],["Western Carolina","Catamounts","#492f91","#bf9e70",["WCU","W Carolina"]],["Western Connecticut State","Colonials","#000000","",["WES","W Conn St"]],["Western Illinois","Leathernecks","#4e1e8a","#ffc90a",["WIU","W Illinois"]],["Western Kentucky","Hilltoppers","#f32026","#b3b5b8",["WKU","W Kentucky"]],["Western Michigan","Broncos","#b59966","#bfa979",["WMU","W Michigan"]],["Western New England","Golden Bears","#000000","",["WES","W New England"]],["Western New Mexico","Mustangs","#000000","",["WES","W New Mexico"]],["Western Oregon","Wolves","#000000","",["WES"]],["Western State","Mountaineers","#000000","",["WES","Western St."]],["Western Washington","Vikings","#000000","",["WES","W Washington"]],["Westfield State","Owls","#000000","",["WES","Westfield St"]],["Westminster","Blue Jays","#000000","",["WMN"]],["Westminster PA","Titans","#000000","",["WMN"]],["Wheaton College (Ill)","Thunder","#000000","",["WHE","Wheaton  (Ill)"]],["Whittier","Poets","#000000","",["WHI"]],["Whitworth","Pirates","#000000","",["WHI"]],["Widener","Pride","#000000","",["WID"]],["Wilkes","Colonels","#000000","",["WIL"]],["Willamette","Bearcats","#000000","",["WIL"]],["William & Mary","Tribe","#103217","#f6b220",["W&M"]],["William Jewell College","Cardinals","#000000","",["WJC","William Jewell"]],["William Paterson","Pioneers","#000000","",["WMP"]],["William Penn","Statesmen","#000000","",["WIL"]],["Williams","Ephs","#000000","",["WIL"]],["Williamson Trade","Mechanics","#000000","",["WIL"]],["Wilmington (OH)","Quakers","#000000","",["WIL"]],["Wingate","Bulldogs","#000000","",["WIN"]],["Winona State","Warriors","#000000","",["WIN","Winona St"]],["Winston-Salem","Rams","#bb0100","",["WSSU"]],["Wisconsin","Badgers","#c5050c","#ffffff",["WIS"]],["Wisconsin Lutheran","Warriors","#000000","",["WIS"]],["Wisconsin-Eau Claire","Blugolds","#000000","",["WIS","UW-Eau Claire"]],["Wisconsin-La Crosse","Eagles","#000000","",["WIS","UW-La Crosse"]],["Wisconsin-Platteville","Pioneers","#000000","",["WIS","UW-Platteville"]],["Wisconsin-Stevens Point","Pointers","#000000","",["WIS","UW-Stevens Point"]],["Wittenberg","Tigers","#000000","",["WIT"]],["Wofford","Terriers","#533b23","#f0f0f0",["WOF"]],["Wooster","Fighting Scots","#000000","",["WOO"]],["Worcester Polytechnic","Engineers","#000000","",["WPI"]],["Worcester State College","Lancers","#000000","",["WOR","Worcester St"]],["Wright State University","Raiders","#a36209","#e2b629",["WRST","Wright State"]],["WV State","Yellow Jackets","#000000","",["WES","WV St"]],["WV Wesleyan","Bobcats","#000000","",["WVW","West Virginia Wesleyan"]],["Wyoming","Cowboys","#533b22","#ffffff",["WYO"]],["Yale","Bulldogs","#004a81","#286dc0",["YALE"]],["Youngstown State","Penguins","#e51936","#690717",["YSU","Youngstown St"]]];
+const TEAM_INDEX = new Map();
+for (const t of TEAMS) {
+  for (const k of [t[0], t[0] + " " + t[1], ...(t[4] || [])]) {
+    const key = k.toLowerCase();
+    if (!TEAM_INDEX.has(key)) TEAM_INDEX.set(key, t);
+  }
+}
+const findTeam = name => TEAM_INDEX.get(String(name || "").trim().toLowerCase());
+function teamDatalist() {
+  if (document.getElementById("team-list")) return;
+  document.body.append(h("datalist", { id: "team-list" },
+    TEAMS.map(t => h("option", { value: t[0], label: t[1] }))));
+}
+/* Fills the color from the lookup and offers the team's two colors as swatches. */
+function wireTeamLookup(inputs, nameKey, colorKey) {
+  const name = inputs[nameKey], color = inputs[colorKey];
+  const sw = h("div", { class: "swatches" });
+  color.closest("label").append(sw);
+  const update = setColor => {
+    const t = findTeam(name.value);
+    sw.replaceChildren();
+    if (!t) return;
+    if (setColor) color.value = t[2];
+    for (const c of [t[2], t[3]].filter(Boolean)) {
+      sw.append(h("button", { type: "button", class: "swatch", style: "background:" + c,
+        "aria-label": `Use ${t[0]} color ${c}`, title: c, onclick: () => { color.value = c; } }));
+    }
+  };
+  name.addEventListener("input", () => update(true));
+  update(false);
+}
+
+/* ---------- Scores and winning squares ----------
+   ESPN scores are pulled by the "pull-scores" function in Supabase, which asks ESPN
+   directly and saves the result. Anyone viewing can trigger it, but nobody can fake it.
+   Admins can still type scores by hand for any league. */
+const ESPN_LEAGUES = ["NFL", "College Football", "NBA", "WNBA", "Men's College Basketball", "Women's College Basketball", "MLB", "NHL", "MLS"];
+const SLOTS = [["q1", "Q1"], ["q2", "Q2"], ["q3", "Q3"], ["final", "Final"]];
+function canPull(ctx) {
+  const L = leagueFor(ctx?.league);
+  return !!L && ESPN_LEAGUES.includes(L.name) && (L.mode === "date" || L.weeks.includes(ctx.label));
+}
+async function pullScores(b) {
+  const { data, error } = await sb.functions.invoke("pull-scores", { body: { board_id: b.id } });
+  if (error) throw new Error("Couldn't update the score right now. " + (error.message || ""));
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+// Winning square for each slot: last digit of each team's score, matched to the drawn numbers
+function winners(b) {
+  const sc = b.scores || {}, map = new Map(), by = {};
+  for (const [k, lbl] of SLOTS) {
+    const s = sc[k];
+    if (!s) continue;
+    const c = b.top_nums.indexOf(s.top % 10), r = b.side_nums.indexOf(s.side % 10);
+    const idx = c >= 0 && r >= 0 ? r * 10 + c + 1 : null;
+    by[k] = { ...s, idx };
+    if (idx) map.set(idx, [...(map.get(idx) || []), lbl === "Final" ? "F" : lbl]);
+  }
+  return { map, by };
+}
+
+async function editScores(b, ctx, refresh) {
+  const sc = b.scores || {}, T = b.top_team || "Top team", S = b.side_team || "Side team";
+  const fields = [];
+  for (const [k, lbl] of SLOTS) fields.push(
+    { name: k + "_top", label: `${lbl}: ${T}`, type: "number", inputmode: "numeric", min: 0, value: sc[k]?.top ?? "", half: true },
+    { name: k + "_side", label: `${lbl}: ${S}`, type: "number", inputmode: "numeric", min: 0, value: sc[k]?.side ?? "", half: true });
+  const espnOk = canPull(ctx);
+  const v = await modal({ title: "Scores",
+    text: espnOk ? "Pull the game from ESPN and it keeps updating on its own. Typing scores in turns ESPN off for this board until you pull again."
+                 : "Type each team's total score at the end of each quarter.",
+    fields, ok: "Save scores",
+    extra: [...(espnOk ? [{ label: "Pull from ESPN", action: "pull", cls: "primary" }] : []),
+            ...(Object.keys(sc).length ? [{ label: "Clear", action: "clear", cls: "danger" }] : [])] });
+  if (!v) return;
+  try {
+    if (v.__action === "pull") {
+      toast("Checking ESPN...");
+      must(await sb.rpc("set_scores", { bid: b.id, sc: {}, ev: b.espn_event }));   // clears typed scores so ESPN takes over
+      const row = await pullScores(b);
+      refresh(row);
+      const s2 = row.scores || {};
+      return toast(s2.note ? s2.note : s2.state === "pre" ? "Game found. Scores fill in once it starts." : "Scores updated from ESPN", !!s2.note);
+    }
+    if (v.__action === "clear") return refresh(must(await sb.rpc("set_scores", { bid: b.id, sc: {}, ev: null })));
+    const out = { state: "manual" };
+    for (const [k] of SLOTS) {
+      const t = String(v[k + "_top"]).trim(), s = String(v[k + "_side"]).trim();
+      out[k] = t !== "" && s !== "" ? { top: Math.max(0, Math.floor(Number(t)) || 0), side: Math.max(0, Math.floor(Number(s)) || 0) } : null;
+    }
+    refresh(must(await sb.rpc("set_scores", { bid: b.id, sc: out, ev: b.espn_event })));
+  } catch (e) { toast(e.message, true); }
+}
+
+// Viewers' "Update score" button: same ESPN check, saved for everyone
+async function viewerPull(b, refresh) {
+  try {
+    toast("Checking ESPN...");
+    const row = await pullScores(b);
+    refresh(row);
+    toast(row.scores?.note || (row.scores?.state === "pre" ? "Game hasn't started yet" : "Score is up to date"), !!row.scores?.note);
+  } catch (e) { toast(e.message, true); }
+}
+
+// One timer per page asks for every open board's score in a single request:
+// every 15 seconds while a game is on (or about to start), every minute otherwise.
+// A board drops off for good once its final score is in (or scores were typed by hand).
+// The server decides whether ESPN actually needs checking (at most every 12 seconds per
+// board, and not at all until 15 minutes before kickoff).
+const FAST_MS = 15000, SLOW_MS = 60000;
+const WATCH = new Map(), LAST_PULL = new Map();
+let WATCH_TIMER = null, WATCH_MS = 0, POLL_SOON = null;
+function stopWatching() { WATCH.clear(); clearInterval(WATCH_TIMER); WATCH_TIMER = null; WATCH_MS = 0; }
+function watchLive(b, ctx, mg, refresh) {
+  const sc = b.scores || {};
+  if (!canPull(ctx) || sc.state === "manual" || sc.state === "post" || sc.final) { WATCH.delete(b.id); return scheduleWatch(); }
+  WATCH.set(b.id, { b, refresh });
+  scheduleWatch();
+  if (Date.now() - (LAST_PULL.get(b.id) || 0) > 10000) { clearTimeout(POLL_SOON); POLL_SOON = setTimeout(pollWatched, 100); }  // check when the board opens
+}
+function scheduleWatch() {
+  const fast = [...WATCH.values()].some(({ b }) => {
+    const sc = b.scores || {}, start = Date.parse(sc.game_date || "");
+    return sc.state === "in" || (Number.isFinite(start) && start - Date.now() < 15 * 60000);
+  });
+  const ms = !WATCH.size ? 0 : fast ? FAST_MS : SLOW_MS;
+  if (ms === WATCH_MS) return;
+  clearInterval(WATCH_TIMER); WATCH_TIMER = ms ? setInterval(pollWatched, ms) : null; WATCH_MS = ms;
+}
+async function pollWatched() {
+  const ids = [...WATCH.keys()];
+  if (!ids.length) return;
+  ids.forEach(id => LAST_PULL.set(id, Date.now()));
+  try {
+    const { data, error } = await sb.functions.invoke("pull-scores", { body: { board_ids: ids } });
+    if (error || !data?.boards) return;
+    for (const row of data.boards) {
+      const w = WATCH.get(row.id);
+      if (w && !row.error && JSON.stringify(row.scores) !== JSON.stringify(w.b.scores)) w.refresh(row);
+    }
+  } catch { /* try again next round */ }
+}
+
+/* ---------- Board block ---------- */
+function boardBlock(b, mg, ctx) {
+  const editable = mg && !b.locked;
+  const block = h("section", { class: "block", "data-board": b.id });
+  const refresh = nb => {
+    const { board_sets } = b;
+    // The page may have been redrawn since this board was built; update whatever copy is on screen now
+    const cur = block.isConnected ? block : document.querySelector(`section[data-board="${b.id}"]`);
+    if (!cur) return;
+    const nw = boardBlock({ ...nb, board_sets }, mg, ctx);
+    cur.replaceWith(nw);
+    requestAnimationFrame(fitBoards);
+  };
+  const sheet = renderSheet(b, editable, refresh);
+  block.append(
+    h("div", { class: "bar" },
+      h("span", { class: "status " + (b.locked ? "locked" : "open") }, b.locked ? "Locked" : "Open"),
+      b.scores?.state === "in" && h("span", { class: "status live" }, "Live"),
+      btn("Save image", () => saveImage(sheet, b)),
+      btn("Copy link", () => copy(link("#/b/" + b.id))),
+      mg && btn("Scores", () => editScores(b, ctx, refresh)),
+      !mg && canPull(ctx) && b.scores?.state !== "post" && b.scores?.state !== "manual" && !b.scores?.final && btn("Update score", () => viewerPull(b, refresh)),
+      editable && btn("Edit details", () => editDetails(b, refresh)),
+      editable && btn("Lock board", () => lockBoard(b, refresh)),
+      b.locked && isSuper() && btn("Unlock", () => unlockBoard(b, refresh), "primary"),
+      editable && btn("Delete", () => deleteBoard(b), "danger")),
+    h("div", { class: "fit" }, sheet)
+  );
+  watchLive(b, ctx, mg, refresh);
+  return block;
+}
+
+function renderSheet(b, editable, refresh) {
+  const win = winners(b), sc = b.scores || {};
+  const clickable = fn => editable ? {
+    role: "button", tabindex: "0", onclick: fn,
+    onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } }
+  } : {};
+  // Dividers between colored number boxes: light lines on dark colors, dark lines on light colors.
+  const divider = c => textOn(c) === "#FFFFFF" ? "#FFFFFF" : "var(--rule)";
+  const numStyle = (c, axis, last) => `background:${c};color:${textOn(c)};` + (last ? "" :
+    (axis === "top" ? `border-right:2px solid ${divider(c)}` : `border-bottom:2px solid ${divider(c)}`));
+  const grid = h("div", { class: "grid" },
+    h("div", { class: "corner" }),
+    h("div", { class: "tlabel" }, h("span", { class: "team", style: "color:" + b.top_color }, b.top_team)),
+    h("div", { class: "slabel" }, h("div", {}, h("span", { class: "team", style: "color:" + b.side_color }, b.side_team)))
+  );
+  for (let i = 0; i < 10; i++) {
+    grid.append(h("div", {
+      class: "num" + (i === 9 ? " c10" : ""), style: `grid-row:2;grid-column:${i + 3};` + numStyle(b.top_color, "top", i === 9),
+      "aria-label": `Top number ${i + 1}`, ...clickable(() => editNumber(b, "top", i + 1, refresh))
+    }, b.top_nums[i] ?? ""));
+    grid.append(h("div", {
+      class: "num" + (i === 9 ? " r10" : ""), style: `grid-row:${i + 3};grid-column:2;` + numStyle(b.side_color, "side", i === 9),
+      "aria-label": `Side number ${i + 1}`, ...clickable(() => editNumber(b, "side", i + 1, refresh))
+    }, b.side_nums[i] ?? ""));
+  }
+  for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) {
+    const idx = r * 10 + c + 1;
+    const wins = win.map.get(idx);
+    grid.append(h("div", {
+      class: "sq" + (c === 9 ? " c10" : "") + (r === 9 ? " r10" : "") + (wins ? " win" : ""),
+      style: `grid-row:${r + 3};grid-column:${c + 3}`,
+      "aria-label": `Square ${idx}${b.squares[idx - 1] ? ", " + b.squares[idx - 1] : ""}`,
+      ...clickable(() => editSquare(b, idx, refresh))
+    }, wins && h("span", { class: "wb" }, wins.join(" ")), h("span", { class: "nm" }, b.squares[idx - 1] || ""), h("span", { class: "no" }, idx)));
+  }
+  return h("div", { class: "sheet" + (editable ? " edit" : ""), "data-cap": b.id },
+    h("div", { class: "kick" }, b.kickoff),
+    sc.detail && h("div", { class: "gstat" + (sc.state === "in" ? " on" : "") },
+      `${sc.detail}: ${b.top_team} ${sc.top_now}, ${b.side_team} ${sc.side_now}`),
+    h("div", { class: "shead" }, h("div", { class: "title" }, `${b.sport ? b.sport + " " : ""}Squares`), h("div", { class: "price" }, `${money(b.price)} per square`)),
+    h("div", { class: "smain" }, grid,
+      h("div", { class: "pay" }, SLOTS.map(([k, lbl]) => {
+        const w = win.by[k];
+        if (!w) return h("div", {}, h("b", {}, lbl + ":"), h("span", {}, money(b[k])));
+        const name = w.idx ? (b.squares[w.idx - 1] || "") : "";
+        // Winner's name is the headline of the box; amount and score sit under it
+        return h("div", { class: "won" }, h("b", {}, lbl + ":"),
+          h("div", { class: "who" + (name ? "" : " none") }, name || (w.idx ? `Square ${w.idx}` : "Draw numbers")),
+          h("div", { class: "amt" }, money(b[k])),
+          h("div", { class: "sc" }, `${w.top}-${w.side}`));
+      }))),
+    b.footer && h("div", { class: "foot" }, b.footer)
+  );
+}
+
+/* ---------- Board actions ---------- */
+async function editSquare(b, idx, refresh) {
+  const cur = b.squares[idx - 1] || "";
+  const v = await modal({ title: `Square ${idx}`, fields: [{ name: "name", label: "Name", value: cur, maxlength: 40, placeholder: "Who owns this square" }],
+    ok: "Save name", extra: cur ? [{ label: "Clear square", action: "clear", cls: "danger" }] : [] });
+  if (!v) return;
+  const val = v.__action === "clear" ? "" : v.name.trim();
+  try { refresh(must(await sb.rpc("set_square", { bid: b.id, idx, val }))); }
+  catch (e) { toast(e.message, true); }
+}
+
+async function editNumber(b, axis, idx, refresh) {
+  const arr = axis === "top" ? b.top_nums : b.side_nums;
+  const team = (axis === "top" ? b.top_team : b.side_team) || (axis === "top" ? "Top" : "Side");
+  const v = await modal({ title: `${team}: box ${idx}`, text: "Enter the drawn number, 0 to 9. Leave blank to clear.",
+    fields: [{ name: "n", label: "Number", type: "number", inputmode: "numeric", min: 0, max: 9, step: 1, value: arr[idx - 1] ?? "" }], ok: "Save number" });
+  if (!v) return;
+  const raw = String(v.n).trim();
+  const val = raw === "" ? null : Number(raw);
+  if (val !== null && !(Number.isInteger(val) && val >= 0 && val <= 9)) return toast("Use a single number from 0 to 9.", true);
+  try { refresh(must(await sb.rpc("set_number", { bid: b.id, axis, idx, val }))); }
+  catch (e) { toast(e.message, true); }
+}
+
+function detailFields(b = {}) {
+  return [
+    { name: "sport", label: "Sport", value: b.sport ?? "Football", list: "sport-list", maxlength: 30, placeholder: "Football, Basketball, or type one" },
+    { name: "top_team", label: "Top team", value: b.top_team, half: true, maxlength: 40, list: "team-list", placeholder: "Start typing a team" },
+    { name: "top_color", label: "Top team color", type: "color", value: b.top_color || "#F7941D", half: true },
+    { name: "side_team", label: "Side team", value: b.side_team, half: true, maxlength: 40, list: "team-list", placeholder: "Start typing a team" },
+    { name: "side_color", label: "Side team color", type: "color", value: b.side_color || "#FFE14D", half: true },
+    { name: "kickoff", label: "Kickoff line", value: b.kickoff, placeholder: "2:30 kickoff", maxlength: 60 },
+    { name: "price", label: "Price per square", type: "number", step: "0.01", min: 0, inputmode: "decimal", value: b.price ?? 6, half: true },
+    { name: "q1", label: "Q1 payout", type: "number", step: "0.01", min: 0, inputmode: "decimal", value: b.q1 ?? 125, half: true },
+    { name: "q2", label: "Q2 payout", type: "number", step: "0.01", min: 0, inputmode: "decimal", value: b.q2 ?? 125, half: true },
+    { name: "q3", label: "Q3 payout", type: "number", step: "0.01", min: 0, inputmode: "decimal", value: b.q3 ?? 125, half: true },
+    { name: "final", label: "Final payout", type: "number", step: "0.01", min: 0, inputmode: "decimal", value: b.final ?? 125, half: true },
+    { name: "footer", label: "Bottom note", value: b.footer ?? "NO PAY, NO PLAY!", maxlength: 60, half: true }
+  ];
+}
+function wireTeams(inputs) {
+  wireTeamLookup(inputs, "top_team", "top_color");
+  wireTeamLookup(inputs, "side_team", "side_color");
+}
+function cleanDetails(v) {
+  const num = x => { const n = Number(x); return Number.isFinite(n) && n >= 0 ? n : 0; };
+  return { sport: v.sport.trim(), top_team: v.top_team.trim(), top_color: v.top_color, side_team: v.side_team.trim(), side_color: v.side_color,
+    kickoff: v.kickoff.trim(), price: num(v.price), q1: num(v.q1), q2: num(v.q2), q3: num(v.q3), final: num(v.final), footer: v.footer.trim() };
+}
+
+async function addBoard(set, count) {
+  teamDatalist(); setList("sport-list", SPORTS);
+  const sport = leagueFor(set.weeks?.league)?.sport ?? "";
+  const v = await modal({ title: "Add board", fields: detailFields({ sport }), ok: "Add board", after: wireTeams });
+  if (!v) return;
+  try { must(await sb.from("boards").insert({ set_id: set.id, sort_order: count, ...cleanDetails(v) })); route(); }
+  catch (e) { toast(e.message, true); }
+}
+
+async function editDetails(b, refresh) {
+  teamDatalist(); setList("sport-list", SPORTS);
+  const v = await modal({ title: "Edit details", fields: detailFields(b), ok: "Save details", after: wireTeams });
+  if (!v) return;
+  try {
+    const rows = must(await sb.from("boards").update(cleanDetails(v)).eq("id", b.id).select());
+    if (!rows.length) return toast("Board is locked or you don't have edit rights.", true);
+    refresh(rows[0]);
+  } catch (e) { toast(e.message, true); }
+}
+
+async function lockBoard(b, refresh) {
+  if (!await confirmBox("Lock this board?", "No one can change it after this. Only the super admin can unlock it.", "Lock board", "primary")) return;
+  try {
+    const rows = must(await sb.from("boards").update({ locked: true }).eq("id", b.id).select());
+    if (!rows.length) return toast("Couldn't lock. The board may already be locked.", true);
+    refresh(rows[0]); toast("Board locked");
+  } catch (e) { toast(e.message, true); }
+}
+
+async function unlockBoard(b, refresh) {
+  if (!isSuper()) return toast("Only the super admin can unlock a board.", true);
+  const v = await modal({ title: "Unlock board", text: "Enter your super admin password to unlock.",
+    fields: [{ name: "pw", label: "Password", type: "password", autocomplete: "current-password", required: true }], ok: "Unlock" });
+  if (!v) return;
+  const { error } = await sb.auth.signInWithPassword({ email: S.session.user.email, password: v.pw });
+  if (error) return toast("Wrong password. Board is still locked.", true);
+  try {
+    const rows = must(await sb.from("boards").update({ locked: false }).eq("id", b.id).select());
+    if (!rows.length) return toast("Couldn't unlock this board.", true);
+    refresh(rows[0]); toast("Board unlocked");
+  } catch (e) { toast(e.message, true); }
+}
+
+async function deleteBoard(b) {
+  if (!await confirmBox("Delete board?", `${boardName(b)} and every name on it will be deleted.`, "Delete board")) return;
+  try {
+    const rows = must(await sb.from("boards").delete().eq("id", b.id).select());
+    if (!rows.length) return toast("Board is locked or you don't have edit rights.", true);
+    if (location.hash.startsWith("#/b/")) go("#/s/" + b.set_id); else route();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function saveImage(sheet, b) {
+  try {
+    await document.fonts?.ready;
+    const canvas = await html2canvas(sheet, {
+      scale: 2, backgroundColor: "#ffffff", useCORS: true,
+      windowWidth: SHEET_W + 40,
+      onclone: doc => {
+        const el = doc.querySelector(`[data-cap="${b.id}"]`);
+        if (!el) return;
+        el.classList.remove("edit");
+        el.style.cssText = "position:static;transform:none;box-shadow:none;margin:0";
+        doc.body.style.background = "#ffffff";
+        doc.body.replaceChildren(el);
+      }
+    });
+    const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
+    const fname = (boardName(b) + (b.kickoff ? " " + b.kickoff : "")).replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") + ".png";
+    const file = new File([blob], fname, { type: "image/png" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: boardName(b) }); return; }
+      catch (e) { if (e.name === "AbortError") return; }
+    }
+    const a = h("a", { href: URL.createObjectURL(blob), download: fname });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  } catch (e) { toast("Couldn't create the image: " + e.message, true); }
+}
+
+/* ---------- Start ---------- */
+(async () => {
+  if (CONFIGURED) {
+    try { await loadMe(); } catch (e) { console.error(e); }
+    sb.auth.onAuthStateChange(ev => {
+      if (ev === "SIGNED_OUT") setTimeout(async () => { await loadMe(); route(); }, 0);
+    });
+  }
+  route();
+})();
+</script>
 </body>
 </html>
