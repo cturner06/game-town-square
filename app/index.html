@@ -42,6 +42,8 @@ button,input{font:inherit}
 .brand .mark{flex-shrink:0}
 .who{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--chalk-dim);min-width:0}
 .who span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.whoname{background:none;border:0;color:inherit;font:inherit;padding:4px 0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;text-decoration:underline dotted;text-underline-offset:3px}
+.mgr{font:700 15px/1.2 var(--ui);color:#444;text-align:left;margin-bottom:-18px}
 .who .btn{white-space:nowrap;flex-shrink:0}
 .wrap{max-width:1040px;margin:0 auto;padding:18px 16px 60px}
 h1{font:800 42px/1 var(--display);margin:6px 0 4px;letter-spacing:.3px}
@@ -255,7 +257,7 @@ function topbar() {
     brandLink(),
     h("div", { class: "who" },
       S.session
-        ? [h("span", {}, S.me?.email + (isSuper() ? " (super admin)" : "")), btn("Sign out", signOut, "ghost")]
+        ? [h("button", { type: "button", class: "whoname", title: "Change your name", onclick: () => editName() }, displayName(S.me) + (isSuper() ? " (super admin)" : "")), btn("Sign out", signOut, "ghost")]
         : h("a", { href: "#/login" }, "Admin sign in"))
   );
 }
@@ -285,7 +287,9 @@ async function route() {
     if (key === "w" && id) return await viewWeek(id);
     if (key === "login" || !S.session) return viewLogin();
     if (key === "c" && id) return await viewCommunity(id);
-    return await viewHome();
+    await viewHome();
+    if (S.me && (!S.me.first_name || !S.me.last_name) && !S.askedName) { S.askedName = true; editName(true); }
+    return;
   } catch (e) {
     render(h("p", { class: "err" }, e.message));
   }
@@ -299,29 +303,60 @@ function viewSetup() {
     h("p", {}, "Open index.html and paste your Supabase project URL and anon public key at the top of the script. See SETUP.md, step 3.")));
 }
 
-function viewLogin() {
-  const email = h("input", { type: "email", autocomplete: "email", required: true, placeholder: "you@example.com" });
-  const pass = h("input", { type: "password", autocomplete: "current-password", required: true, minlength: 6 });
-  const signIn = async e => {
+function viewLogin(mode = "signin") {
+  const creating = mode === "create";
+  const inp = (type, ac, extra = {}) => h("input", { type, autocomplete: ac, ...extra });
+  const first = inp("text", "given-name", { required: true, maxlength: 40 });
+  const last = inp("text", "family-name", { required: true, maxlength: 40 });
+  const nick = inp("text", "nickname", { maxlength: 40, placeholder: "Optional, like Coach T" });
+  const email = inp("email", "email", { required: true, placeholder: "you@example.com" });
+  const pass = inp("password", creating ? "new-password" : "current-password", { required: true, minlength: 6 });
+  const submit = async e => {
     e.preventDefault();
-    const { error } = await sb.auth.signInWithPassword({ email: email.value.trim(), password: pass.value });
-    if (error) return toast(error.message, true);
-    await loadMe(); go("#/");
-  };
-  const signUp = async () => {
-    if (!email.value || pass.value.length < 6) return toast("Enter an email and a password of 6+ characters.", true);
-    const { data, error } = await sb.auth.signUp({ email: email.value.trim(), password: pass.value });
+    if (!creating) {
+      const { error } = await sb.auth.signInWithPassword({ email: email.value.trim(), password: pass.value });
+      if (error) return toast(error.message, true);
+      await loadMe(); return go("#/");
+    }
+    if (!first.value.trim() || !last.value.trim()) return toast("Enter your first and last name.", true);
+    if (pass.value.length < 6) return toast("Use a password of 6 or more characters.", true);
+    const { data, error } = await sb.auth.signUp({ email: email.value.trim(), password: pass.value,
+      options: { data: { first_name: first.value.trim(), last_name: last.value.trim(), nickname: nick.value.trim() } } });
     if (error) return toast(error.message, true);
     if (!data.session) return toast("Check your email to confirm your login, then sign in.");
     await loadMe(); go("#/");
   };
+  const field = (label, el, half) => h("label", { class: half ? "half" : "" }, h("span", {}, label), el);
   $app.replaceChildren(topbar(), h("div", { class: "panel" },
-    h("h1", {}, "Admin sign in"),
-    h("p", {}, "Viewers don't need to sign in. Just open the board link you were sent."),
-    h("form", { class: "mform", onsubmit: signIn },
-      h("label", {}, h("span", {}, "Email"), email),
-      h("label", {}, h("span", {}, "Password"), pass),
-      h("div", { class: "mbtns" }, btn("Create login", signUp), h("button", { class: "btn primary", type: "submit" }, "Sign in")))));
+    h("h1", {}, creating ? "Create login" : "Admin sign in"),
+    h("p", {}, creating ? "For people running boards. Your name shows on the boards you manage."
+                        : "Viewers don't need to sign in. Just open the board link you were sent."),
+    h("form", { class: "mform", onsubmit: submit },
+      creating && [field("First name", first, true), field("Last name", last, true), field("What should we call you?", nick)],
+      field("Email", email), field("Password", pass),
+      h("div", { class: "mbtns" },
+        btn(creating ? "I have a login" : "Create login", () => viewLogin(creating ? "signin" : "create")),
+        h("button", { class: "btn primary", type: "submit" }, creating ? "Create login" : "Sign in")))));
+  (creating ? first : email).focus();
+}
+
+// Name shown on boards: "what to call you" if given, otherwise first and last name
+const displayName = p => (p?.nickname || "").trim() || [p?.first_name, p?.last_name].map(x => (x || "").trim()).filter(Boolean).join(" ") || p?.email || "";
+async function editName(required = false) {
+  const v = await modal({ title: required ? "Add your name" : "Your name",
+    text: "This shows as the manager on boards you create.",
+    fields: [
+      { name: "first_name", label: "First name", value: S.me?.first_name || "", required: true, maxlength: 40, half: true, autocomplete: "given-name" },
+      { name: "last_name", label: "Last name", value: S.me?.last_name || "", required: true, maxlength: 40, half: true, autocomplete: "family-name" },
+      { name: "nickname", label: "What should we call you? (optional)", value: S.me?.nickname || "", maxlength: 40, autocomplete: "nickname" }
+    ], ok: "Save" });
+  if (!v) return;
+  const row = { first_name: v.first_name.trim(), last_name: v.last_name.trim(), nickname: v.nickname.trim() };
+  if (!row.first_name || !row.last_name) return toast("Enter your first and last name.", true);
+  try {
+    must(await sb.from("profiles").update(row).eq("id", S.me.id));
+    await loadMe(); route(); toast("Name saved");
+  } catch (e) { toast(e.message, true); }
 }
 
 async function signOut() { await sb.auth.signOut(); await loadMe(); go("#/login"); }
@@ -806,6 +841,7 @@ function renderSheet(b, editable, refresh) {
     }, wins && h("span", { class: "wb" }, wins.join(" ")), h("span", { class: "nm" }, b.squares[idx - 1] || ""), h("span", { class: "no" }, idx)));
   }
   return h("div", { class: "sheet" + (editable ? " edit" : ""), "data-cap": b.id },
+    b.managed_by_name && h("div", { class: "mgr" }, `Managed by ${b.managed_by_name}`),
     h("div", { class: "kick" }, b.kickoff),
     sc.detail && h("div", { class: "gstat" + (sc.state === "in" ? " on" : "") },
       `${sc.detail}: ${b.top_team} ${sc.top_now}, ${b.side_team} ${sc.side_now}`),
