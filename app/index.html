@@ -43,7 +43,7 @@ button,input{font:inherit}
 .who{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--chalk-dim);min-width:0}
 .who span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .whoname{background:none;border:0;color:inherit;font:inherit;padding:4px 0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;text-decoration:underline dotted;text-underline-offset:3px}
-.mgr{font:700 15px/1.2 var(--ui);color:#444;text-align:left;margin-bottom:-18px}
+.sheettop{display:flex;justify-content:space-between;gap:12px;font:700 15px/1.2 var(--ui);color:#444;margin-bottom:-18px}
 .who .btn{white-space:nowrap;flex-shrink:0}
 .wrap{max-width:1040px;margin:0 auto;padding:18px 16px 60px}
 h1{font:800 42px/1 var(--display);margin:6px 0 4px;letter-spacing:.3px}
@@ -134,7 +134,7 @@ h2{font:700 20px/1.2 var(--ui);margin:28px 0 10px}
 .mform{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
 .mform label{display:flex;flex-direction:column;gap:4px;font-size:14px;font-weight:600;color:#444;grid-column:span 2}
 .mform label.half{grid-column:span 1}
-.mform input{min-height:42px;padding:8px 10px;border:1px solid #B8B8B8;border-radius:6px;font-size:16px;color:var(--ink);background:#fff;width:100%}
+.mform input,.mform select{min-height:42px;padding:8px 10px;border:1px solid #B8B8B8;border-radius:6px;font-size:16px;color:var(--ink);background:#fff;width:100%}
 .mform input[type=color]{padding:3px;height:42px}
 .swatches{display:flex;gap:6px}
 .swatch{width:34px;height:28px;border-radius:5px;border:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.35);cursor:pointer}
@@ -159,7 +159,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_zYFwDKLwpHVsyrejG5tZZw_4TOu7Mvi";   //
 const CONFIGURED = !SUPABASE_URL.startsWith("PASTE") && !SUPABASE_ANON_KEY.startsWith("PASTE");
 const sb = CONFIGURED ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 const SHEET_W = 980;
-const S = { session: null, me: null, admin: new Set() };
+const S = { session: null, me: null, admin: new Set(), helper: new Set() };
 const $app = document.getElementById("app");
 
 /* ---------- Small helpers ---------- */
@@ -180,6 +180,11 @@ function h(tag, attrs = {}, ...kids) {
 }
 const btn = (label, fn, cls = "") => h("button", { class: "btn " + cls, type: "button", onclick: fn }, label);
 const money = n => Number(n || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
+// When the board was locked, in the reader's own time zone
+const lockTime = t => {
+  const d = new Date(t);
+  return isNaN(d) ? "" : d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+};
 const boardName = b => [b.top_team, b.side_team].filter(Boolean).join(" vs ") || "Untitled board";
 const link = hash => location.origin + location.pathname + hash;
 const isSuper = () => !!(S.me && S.me.is_super_admin);
@@ -216,11 +221,13 @@ function modal({ title, text, fields = [], ok = "Save", okClass = "primary", ext
       close(vals);
     }});
     for (const f of fields) {
-      const inp = h("input", {
-        type: f.type || "text", name: f.name, value: f.value ?? "", placeholder: f.placeholder,
-        inputmode: f.inputmode, min: f.min, max: f.max, step: f.step, maxlength: f.maxlength,
-        autocomplete: f.autocomplete || "off", required: f.required, list: f.list
-      });
+      const inp = f.options
+        ? h("select", { name: f.name }, f.options.map(o => h("option", { value: o.value, selected: String(o.value) === String(f.value) }, o.label)))
+        : h("input", {
+            type: f.type || "text", name: f.name, value: f.value ?? "", placeholder: f.placeholder,
+            inputmode: f.inputmode, min: f.min, max: f.max, step: f.step, maxlength: f.maxlength,
+            autocomplete: f.autocomplete || "off", required: f.required, list: f.list
+          });
       inputs[f.name] = inp;
       form.append(h("label", { class: f.half ? "half" : "" }, h("span", {}, f.label), inp));
     }
@@ -252,6 +259,8 @@ async function loadMe() {
   S.me = p || { id: uid, email: S.session.user.email, is_super_admin: false };
   const ca = must(await sb.from("community_admins").select("community_id").eq("user_id", uid));
   ca.forEach(r => S.admin.add(r.community_id));
+  const ba = must(await sb.from("board_admins").select("board_id").eq("user_id", uid));
+  S.helper = new Set((ba || []).map(r => r.board_id));
 }
 
 /* ---------- Layout ---------- */
@@ -527,7 +536,8 @@ async function viewCommunity(id) {
   const nodes = [
     h("div", { class: "crumbs" }, h("a", { href: "#/" }, "Communities")),
     h("h1", {}, c.name),
-    h("div", { class: "actions" }, btn("New game week", () => newWeek(id, weeks), "primary")),
+    h("div", { class: "actions" }, btn("New game week", () => newWeek(id, weeks), "primary"),
+      btn("Rename community", () => renameCommunity(c))),
     weeks.length
       ? [...groups].map(([k, ws]) => [
           h("h2", {}, k),
@@ -555,17 +565,19 @@ async function viewCommunity(id) {
   render(...nodes);
 }
 
-async function newWeek(cid, weeks) {
+async function weekForm(title, ok, current, weeks) {
   setList("league-list", Object.keys(LEAGUES));
   const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-  const v = await modal({ title: "New game week", text: "Pick a league. Football leagues use weeks; other ESPN leagues use the game date. Any other league, type your own.",
+  const curDate = current && String(current.sort_key).length === 8
+    ? `${String(current.sort_key).slice(0, 4)}-${String(current.sort_key).slice(4, 6)}-${String(current.sort_key).slice(6)}` : today;
+  const v = await modal({ title, ok,
+    text: "Pick a league. Football leagues use weeks; other ESPN leagues use the game date. Any other league, type your own.",
     fields: [
-      { name: "league", label: "League", list: "league-list", placeholder: "NFL, NBA, MLB, or type one", required: true, maxlength: 40 },
-      { name: "season", label: "Season", type: "number", inputmode: "numeric", value: currentSeason(), min: 2000, max: 2100, half: true },
-      { name: "label", label: "Week", list: "week-list", placeholder: "Week 1", maxlength: 40, half: true },
-      { name: "date", label: "Game date", type: "date", value: today }
+      { name: "league", label: "League", list: "league-list", value: current?.league || "", placeholder: "NFL, NBA, MLB, or type one", required: true, maxlength: 40 },
+      { name: "season", label: "Season", type: "number", inputmode: "numeric", value: current?.season ?? currentSeason(), min: 2000, max: 2100, half: true },
+      { name: "label", label: "Week", list: "week-list", value: current && !String(current.sort_key).match(/^\d{8}$/) ? current.label : "", placeholder: "Week 1", maxlength: 40, half: true },
+      { name: "date", label: "Game date", type: "date", value: curDate }
     ],
-    ok: "Create week",
     after: inputs => {
       const show = (el, on) => { el.closest("label").style.display = on ? "" : "none"; };
       const sync = () => {
@@ -575,29 +587,48 @@ async function newWeek(cid, weeks) {
       };
       inputs.league.addEventListener("input", sync); sync();
     } });
-  if (!v) return;
+  if (!v) return null;
   const L = leagueFor(v.league);
   const league = L ? L.name : v.league.trim();
-  if (!league) return toast("Enter a league.", true);
-  let season, label, sort_key;
+  if (!league) { toast("Enter a league.", true); return null; }
   if (L?.mode === "date") {
-    if (!v.date) return toast("Pick the game date.", true);
+    if (!v.date) { toast("Pick the game date.", true); return null; }
     const d = dateParts(v.date);
-    season = L.crossYear && d.m < 8 ? d.y - 1 : d.y;   // Jan-Jul games belong to the season that started last fall
-    label = d.label; sort_key = d.key;
-  } else {
-    season = Number(v.season) || currentSeason();
-    label = v.label.trim();
-    if (!label) return toast("Enter the week.", true);
-    // Preset weeks sort in season order; typed-in weeks go after the latest one
-    const idx = L ? L.weeks.findIndex(x => x.toLowerCase() === label.toLowerCase()) : -1;
-    if (idx >= 0) label = L.weeks[idx];
-    const same = weeks.filter(w => w.league === league && w.season === season);
-    sort_key = idx >= 0 ? idx + 1 : Math.max(0, ...same.map(w => w.sort_key)) + 1;
+    return { league, season: L.crossYear && d.m < 8 ? d.y - 1 : d.y, label: d.label, sort_key: d.key };
   }
-  const { data, error } = await sb.from("weeks").insert({ community_id: cid, league, season, label, sort_key }).select().single();
+  const season = Number(v.season) || currentSeason();
+  let label = v.label.trim();
+  if (!label) { toast("Enter the week.", true); return null; }
+  // Preset weeks sort in season order; typed-in weeks go after the latest one
+  const idx = L ? L.weeks.findIndex(x => x.toLowerCase() === label.toLowerCase()) : -1;
+  if (idx >= 0) label = L.weeks[idx];
+  const same = (weeks || []).filter(w => w.league === league && w.season === season && w.id !== current?.id);
+  return { league, season, label, sort_key: idx >= 0 ? idx + 1 : Math.max(0, ...same.map(w => w.sort_key)) + 1 };
+}
+
+async function renameCommunity(c) {
+  const v = await modal({ title: "Rename community",
+    fields: [{ name: "name", label: "Community name", value: c.name, required: true, maxlength: 80 }], ok: "Save name" });
+  if (!v || !v.name.trim()) return;
+  try { must(await sb.from("communities").update({ name: v.name.trim() }).eq("id", c.id)); route(); }
+  catch (e) { toast(e.message, true); }
+}
+
+async function newWeek(cid, weeks) {
+  const row = await weekForm("New game week", "Create week", null, weeks);
+  if (!row) return;
+  const { data, error } = await sb.from("weeks").insert({ community_id: cid, ...row }).select().single();
   if (error) return toast(error.code === "23505" ? "That week already exists in this community." : error.message, true);
   go("#/w/" + data.id);
+}
+
+async function editWeek(w) {
+  const weeks = must(await sb.from("weeks").select("id,league,season,sort_key").eq("community_id", w.community_id));
+  const row = await weekForm("Edit game week", "Save week", w, weeks);
+  if (!row) return;
+  const { error } = await sb.from("weeks").update(row).eq("id", w.id);
+  if (error) return toast(error.code === "23505" ? "That week already exists in this community." : error.message, true);
+  route();
 }
 
 async function deleteWeek(w) {
@@ -620,6 +651,9 @@ async function viewWeek(id) {
     h("p", { class: "sub" }, `${w.league}, ${seasonLabel(w.league, w.season)} season` + (mg ? "" : ` (${w.communities?.name || ""})`)),
     h("div", { class: "actions" },
       btn("Copy week link", () => copy(link("#/w/" + id))),
+      mg && btn("Edit week", () => editWeek(w)),
+      mg && sets.some(x => x.boards.some(y => !y.locked)) &&
+        btn("Lock open boards", () => lockAll(sets.flatMap(x => x.boards.filter(y => !y.locked).map(y => y.id)))),
       mg && btn("New board set", () => newSet(w), "primary")),
     sets.length
       ? h("ul", { class: "list" }, sets.map(s => {
@@ -642,6 +676,25 @@ async function newSet(w) {
     const row = must(await sb.from("board_sets").insert({ community_id: w.community_id, week_id: w.id, name: v.name.trim() }).select().single());
     go("#/s/" + row.id);
   } catch (e) { toast(e.message, true); }
+}
+
+async function moveSet(set) {
+  const weeks = must(await sb.from("weeks").select("id,league,season,label,sort_key").eq("community_id", set.community_id)).sort(weekSort);
+  if (weeks.length < 2) return toast("Make another game week first.", true);
+  const v = await modal({ title: "Move board set", text: `Move "${set.name}" to a different game week.`,
+    fields: [{ name: "week", label: "Game week", value: set.week_id,
+      options: weeks.map(w => ({ value: w.id, label: `${w.label} — ${w.league} ${seasonLabel(w.league, w.season)}` })) }], ok: "Move set" });
+  if (!v) return;
+  try { must(await sb.from("board_sets").update({ week_id: v.week }).eq("id", set.id)); route(); }
+  catch (e) { toast(e.message, true); }
+}
+
+async function renameSet(set) {
+  const v = await modal({ title: "Rename board set",
+    fields: [{ name: "name", label: "Set name", value: set.name, required: true, maxlength: 80 }], ok: "Save name" });
+  if (!v || !v.name.trim()) return;
+  try { must(await sb.from("board_sets").update({ name: v.name.trim() }).eq("id", set.id)); route(); }
+  catch (e) { toast(e.message, true); }
 }
 
 async function deleteSet(s) {
@@ -696,8 +749,11 @@ async function viewSet(id) {
     h("p", { class: "sub" }, wk.league ? `${wk.label}, ${wk.league} ${seasonLabel(wk.league, wk.season)}` : ""),
     h("div", { class: "actions" },
       btn("Copy set link", () => copy(link("#/s/" + id))),
-      mg && btn("Add board", () => addBoard(set, boards.length), "primary")),
-    boards.length ? boards.map(b => boardBlock(b, mg, { ...set.weeks })) : h("p", { class: "empty" }, mg ? "Add a board for each game in this set." : "No boards posted yet.")
+      mg && btn("Rename set", () => renameSet(set)),
+      mg && btn("Move to week", () => moveSet(set)),
+      mg && btn("Add board", () => addBoard(set, boards.length), "primary"),
+      mg && boards.some(x => !x.locked) && btn("Lock open boards", () => lockAll(boards.filter(x => !x.locked).map(x => x.id)))),
+    boards.length ? boards.map(b => boardBlock(b, mg, { ...set.weeks, community_id: set.community_id, siblings: boards.length })) : h("p", { class: "empty" }, mg ? "Add a board for each game in this set." : "No boards posted yet.")
   );
 }
 
@@ -706,9 +762,11 @@ async function viewBoard(id) {
   if (!b) throw new Error("Board not found. Check the link.");
   const mg = canManage(b.board_sets.community_id);
   const wk = must(await sb.from("weeks").select("*").eq("id", b.board_sets.week_id).maybeSingle());
+  const owner = mg || (S.me && b.managed_by === S.me.id);
   render(
     h("div", { class: "crumbs" }, h("a", { href: "#/s/" + b.board_sets.id }, b.board_sets.name)),
-    boardBlock(b, mg, wk || undefined)
+    boardBlock(b, mg, { ...(wk || {}), community_id: b.board_sets.community_id, siblings: 1 }),
+    owner ? await helpersPanel(b) : null
   );
 }
 
@@ -863,7 +921,10 @@ async function pollWatched() {
 
 /* ---------- Board block ---------- */
 function boardBlock(b, mg, ctx) {
-  const editable = mg && !b.locked;
+  const helper = !mg && S.helper?.has(b.id);          // helper on this one board
+  const canEdit = mg || helper;
+  const owner = mg || (S.me && b.managed_by === S.me.id);
+  const editable = canEdit && !b.locked;
   const block = h("section", { class: "block", "data-board": b.id });
   const refresh = nb => {
     const { board_sets } = b;
@@ -878,15 +939,20 @@ function boardBlock(b, mg, ctx) {
   block.append(
     h("div", { class: "bar" },
       h("span", { class: "status " + (b.locked ? "locked" : "open") }, b.locked ? "Locked" : "Open"),
+      !b.locked && b.scores?.game_date && h("span", { class: "meta" }, `Locks 5 min before kickoff (${lockTime(new Date(Date.parse(b.scores.game_date) - 5 * 60000))})`),
       b.scores?.state === "in" && h("span", { class: "status live" }, "Live"),
       btn("Save image", () => saveImage(sheet, b)),
       btn("Copy link", () => copy(link("#/b/" + b.id))),
-      mg && btn("Scores", () => editScores(b, ctx, refresh)),
-      !mg && canPull(ctx) && b.scores?.state !== "post" && b.scores?.state !== "manual" && !b.scores?.final && btn("Update score", () => viewerPull(b, refresh)),
-      editable && btn("Edit details", () => editDetails(b, refresh)),
+      canEdit && btn("Scores", () => editScores(b, ctx, refresh)),
+      !canEdit && canPull(ctx) && b.scores?.state !== "post" && b.scores?.state !== "manual" && !b.scores?.final && btn("Update score", () => viewerPull(b, refresh)),
+      mg && !b.locked && btn("Edit details", () => editDetails(b, refresh)),
       editable && btn("Lock board", () => lockBoard(b, refresh)),
       b.locked && isSuper() && btn("Unlock", () => unlockBoard(b, refresh), "primary"),
-      editable && btn("Delete", () => deleteBoard(b), "danger")),
+      mg && !b.locked && btn("Move board", () => moveBoard(b, ctx)),
+      mg && !b.locked && ctx?.siblings > 1 && btn("Move up", () => reorderBoard(b, -1, ctx)),
+      mg && !b.locked && ctx?.siblings > 1 && btn("Move down", () => reorderBoard(b, 1, ctx)),
+      mg && !b.locked && btn("Delete", () => deleteBoard(b), "danger"),
+      owner && btn("Helpers", () => go("#/b/" + b.id))),
     h("div", { class: "fit" }, sheet)
   );
   watchLive(b, ctx, mg, refresh);
@@ -929,7 +995,9 @@ function renderSheet(b, editable, refresh) {
     }, wins && h("span", { class: "wb" }, wins.join(" ")), h("span", { class: "nm" }, b.squares[idx - 1] || ""), h("span", { class: "no" }, idx)));
   }
   return h("div", { class: "sheet" + (editable ? " edit" : ""), "data-cap": b.id },
-    b.managed_by_name && h("div", { class: "mgr" }, `Managed by ${b.managed_by_name}`),
+    (b.managed_by_name || b.locked_at) && h("div", { class: "sheettop" },
+      h("span", {}, b.managed_by_name ? `Managed by ${b.managed_by_name}` : ""),
+      h("span", {}, b.locked_at ? `Locked ${lockTime(b.locked_at)}` : "")),
     h("div", { class: "kick" }, b.kickoff),
     sc.detail && h("div", { class: "gstat" + (sc.state === "in" ? " on" : "") },
       `${sc.detail}: ${b.top_team} ${sc.top_now}, ${b.side_team} ${sc.side_now}`),
@@ -1019,6 +1087,51 @@ async function editDetails(b, refresh) {
   } catch (e) { toast(e.message, true); }
 }
 
+// Quick way to close out everything still open
+async function lockAll(ids) {
+  if (!ids.length) return toast("Nothing open to lock.");
+  if (!await confirmBox("Lock open boards?", `${ids.length} board${ids.length === 1 ? "" : "s"} will be locked. Only the super admin can unlock.`, "Lock them", "primary")) return;
+  let n = 0;
+  for (const id of ids) {
+    try { const rows = must(await sb.from("boards").update({ locked: true }).eq("id", id).select()); if (rows.length) n++; }
+    catch (e) { toast(e.message, true); }
+  }
+  toast(`${n} board${n === 1 ? "" : "s"} locked`);
+  route();
+}
+
+// Helpers can work on one board only: names, numbers, scores and locking
+async function helpersPanel(b) {
+  const wrap = h("section", { class: "block" });
+  const list = h("ul", { class: "list" });
+  const load = async () => {
+    const rows = must(await sb.rpc("board_helpers", { bid: b.id })) || [];
+    list.replaceChildren(...(rows.length ? rows.map(r => h("li", {},
+      h("div", {}, h("b", {}, r.display_name), h("div", { class: "meta" }, r.email)),
+      btn("Remove", async () => {
+        try { must(await sb.rpc("board_remove_helper", { bid: b.id, uid: r.user_id })); await load(); toast("Helper removed"); }
+        catch (e) { toast(e.message, true); }
+      }, "danger")))
+      : [h("p", { class: "empty" }, "No helpers yet.")]));
+  };
+  await load();
+  wrap.append(
+    h("h2", {}, "Helpers on this board"),
+    h("p", { class: "sub" }, "Helpers fill in names, draw numbers, update scores and can lock this board. Nothing else, and no other board."),
+    h("div", { class: "actions" }, btn("Add helper", async () => {
+      const v = await modal({ title: "Add helper", text: "They need to create a login first.",
+        fields: [{ name: "email", label: "Their login email", type: "email", required: true }], ok: "Add helper" });
+      if (!v) return;
+      try {
+        const msg = must(await sb.rpc("board_add_helper", { bid: b.id, e: v.email }));
+        if (msg !== "added") return toast(msg, true);
+        await load(); toast("Helper added");
+      } catch (e) { toast(e.message, true); }
+    }, "primary")),
+    list);
+  return wrap;
+}
+
 async function lockBoard(b, refresh) {
   if (!await confirmBox("Lock this board?", "No one can change it after this. Only the super admin can unlock it.", "Lock board", "primary")) return;
   try {
@@ -1039,6 +1152,36 @@ async function unlockBoard(b, refresh) {
     const rows = must(await sb.from("boards").update({ locked: false }).eq("id", b.id).select());
     if (!rows.length) return toast("Couldn't unlock this board.", true);
     refresh(rows[0]); toast("Board unlocked");
+  } catch (e) { toast(e.message, true); }
+}
+
+async function moveBoard(b, ctx) {
+  const setId = b.set_id;
+  const cid = ctx?.community_id || b.board_sets?.community_id;
+  const sets = must(await sb.from("board_sets").select("id,name,weeks(label,league,season)").eq("community_id", cid));
+  if (sets.length < 2) return toast("Make another board set first.", true);
+  const v = await modal({ title: "Move board", text: `Move ${boardName(b)} to a different board set.`,
+    fields: [{ name: "set", label: "Board set", value: setId,
+      options: sets.map(x => ({ value: x.id, label: `${x.name} — ${x.weeks?.label || ""}` })) }], ok: "Move board" });
+  if (!v || v.set === setId) return;
+  try {
+    const rows = must(await sb.from("boards").update({ set_id: v.set }).eq("id", b.id).select());
+    if (!rows.length) return toast("Board is locked or you don't have edit rights.", true);
+    location.hash.startsWith("#/b/") ? go("#/s/" + v.set) : route();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function reorderBoard(b, dir, ctx) {
+  try {
+    const list = must(await sb.from("boards").select("id,sort_order,created_at").eq("set_id", b.set_id))
+      .sort((x, y) => x.sort_order - y.sort_order || String(x.created_at).localeCompare(String(y.created_at)));
+    const i = list.findIndex(x => x.id === b.id), j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return;
+    // Renumber the whole set so ties can't leave two boards stuck together
+    const order = list.map(x => x.id);
+    order.splice(j, 0, ...order.splice(i, 1));
+    for (let k = 0; k < order.length; k++) must(await sb.from("boards").update({ sort_order: k }).eq("id", order[k]));
+    route();
   } catch (e) { toast(e.message, true); }
 }
 
