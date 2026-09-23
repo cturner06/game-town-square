@@ -60,6 +60,16 @@ h2{font:700 20px/1.2 var(--ui);margin:28px 0 10px}
 .list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .list li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:8px;background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
 .list a{font-weight:600;text-decoration:none}
+.search{width:100%;min-height:44px;padding:10px 12px;margin:6px 0 14px;border-radius:8px;border:0;box-shadow:inset 0 0 0 1px rgba(255,255,255,.25);background:rgba(255,255,255,.06);color:var(--chalk);font-size:16px}
+.people{display:grid;gap:10px}
+.person{padding:14px;border-radius:10px;background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+.phead{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;margin-bottom:8px}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{font-size:12px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--gold-tag,#F2B61D);color:#1D1D1D}
+.check{display:flex;align-items:center;gap:8px;min-height:36px;font-weight:600}
+.check input{width:20px;height:20px;accent-color:var(--marker)}
+.commlist{margin:6px 0 4px;padding-left:2px}
+.person .actions{margin:10px 0 0}
 .list a:hover{text-decoration:underline}
 .meta{font-size:14px;color:var(--chalk-dim)}
 .empty{color:var(--chalk-dim);padding:18px 0}
@@ -287,6 +297,7 @@ async function route() {
     if (key === "w" && id) return await viewWeek(id);
     if (key === "login" || !S.session) return viewLogin();
     if (key === "c" && id) return await viewCommunity(id);
+    if (key === "people") return await viewPeople();
     await viewHome();
     if (S.me && (!S.me.first_name || !S.me.last_name) && !S.askedName) { S.askedName = true; editName(true); }
     return;
@@ -366,7 +377,8 @@ async function viewHome() {
   const list = isSuper() ? all : all.filter(c => S.admin.has(c.id));
   render(
     h("h1", {}, "Communities"),
-    isSuper() && h("div", { class: "actions" }, btn("New community", newCommunity, "primary")),
+    isSuper() && h("div", { class: "actions" }, btn("New community", newCommunity, "primary"),
+      h("a", { class: "btn", href: "#/people" }, "People")),
     list.length
       ? h("ul", { class: "list" }, list.map(c => h("li", {}, h("a", { href: "#/c/" + c.id }, c.name))))
       : h("p", { class: "empty" }, isSuper()
@@ -380,6 +392,82 @@ async function newCommunity() {
   if (!v || !v.name.trim()) return;
   try { must(await sb.from("communities").insert({ name: v.name.trim() })); route(); }
   catch (e) { toast(e.message, true); }
+}
+
+
+/* ---------- People (super admin only) ---------- */
+async function viewPeople() {
+  if (!isSuper()) throw new Error("Only a super admin can manage people.");
+  let people = must(await sb.rpc("admin_people")) || [];
+  const comms = must(await sb.from("communities").select("id,name").order("name"));
+  const list = h("div", { class: "people" });
+  const search = h("input", { type: "search", class: "search", placeholder: "Search name or email", oninput: draw });
+  const reload = async () => { people = must(await sb.rpc("admin_people")) || []; draw(); };
+
+  const act = async (fn, el) => {
+    try { await fn(); await reload(); }
+    catch (e) { toast(e.message, true); if (el) el.checked = !el.checked; }
+  };
+  function card(p) {
+    const me = p.id === S.me.id;
+    const tags = [p.is_owner && "Owner", p.is_super_admin && !p.is_owner && "Super admin", me && "You"].filter(Boolean);
+    const sup = h("input", { type: "checkbox", checked: p.is_super_admin, disabled: p.is_owner });
+    sup.addEventListener("change", () => act(async () => {
+      must(await sb.rpc("admin_set_super", { uid: p.id, val: sup.checked }));
+      toast(sup.checked ? `${p.display_name} is now a super admin` : `${p.display_name} is no longer a super admin`);
+    }, sup));
+    return h("div", { class: "person" },
+      h("div", { class: "phead" },
+        h("div", {}, h("b", {}, p.display_name), h("div", { class: "meta" }, p.email)),
+        tags.length ? h("div", { class: "tags" }, tags.map(t => h("span", { class: "tag" }, t))) : null),
+      h("label", { class: "check" }, sup, h("span", {}, "Super admin"),
+        p.is_owner && h("span", { class: "meta" }, " (the owner stays super admin)")),
+      comms.length ? h("div", { class: "commlist" },
+        h("div", { class: "meta" }, "Manages:"),
+        comms.map(c => {
+          const on = (p.communities || []).includes(c.id);
+          const box = h("input", { type: "checkbox", checked: on, disabled: p.is_super_admin });
+          box.addEventListener("change", () => act(async () => {
+            must(await sb.rpc("admin_set_community", { uid: p.id, cid: c.id, val: box.checked }));
+          }, box));
+          return h("label", { class: "check" }, box, h("span", {}, c.name));
+        })) : h("p", { class: "meta" }, "No communities yet."),
+      p.is_super_admin && h("p", { class: "meta" }, "Super admins manage every community."),
+      h("div", { class: "actions" },
+        btn("Send password reset", async () => {
+          const { error } = await sb.auth.resetPasswordForEmail(p.email, { redirectTo: link("#/") });
+          toast(error ? error.message : `Reset email sent to ${p.email}`, !!error);
+        }),
+        !p.is_owner && !me && btn("Remove access", () => act(async () => {
+          if (!await confirmBox("Remove access?", `${p.display_name} keeps their login but loses all admin access. Boards they made stay put.`, "Remove access")) return;
+          must(await sb.rpc("admin_remove_person", { uid: p.id }));
+          toast(`${p.display_name} removed`);
+        }), "danger"))
+    );
+  }
+  function draw() {
+    const q = search.value.trim().toLowerCase();
+    const rows = people.filter(p => !q || `${p.display_name} ${p.email}`.toLowerCase().includes(q));
+    list.replaceChildren(...(rows.length ? rows.map(card) : [h("p", { class: "empty" }, "Nobody matches that.")]));
+  }
+  draw();
+  render(
+    h("div", { class: "crumbs" }, h("a", { href: "#/" }, "Communities")),
+    h("h1", {}, "People"),
+    h("p", { class: "sub" }, `${people.length} login${people.length === 1 ? "" : "s"} created. Anyone who signs up shows here with no access until you give them some.`),
+    people.length > 6 ? search : null,
+    list
+  );
+}
+
+// Password reset links land back here
+async function handleRecovery() {
+  const v = await modal({ title: "Set a new password", text: "Enter a new password for your login.",
+    fields: [{ name: "pw", label: "New password", type: "password", autocomplete: "new-password", required: true }], ok: "Save password" });
+  if (!v) return;
+  if (String(v.pw).length < 6) return toast("Use a password of 6 or more characters.", true);
+  const { error } = await sb.auth.updateUser({ password: v.pw });
+  toast(error ? error.message : "Password changed", !!error);
 }
 
 /* ---------- Game schedule (ESPN model) ----------
@@ -1000,6 +1088,7 @@ async function saveImage(sheet, b) {
     });
   }
   route();
+  if (/type=recovery/.test(location.hash) || /type=recovery/.test(location.search)) handleRecovery();
 })();
 </script>
 </body>
