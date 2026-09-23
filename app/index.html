@@ -949,6 +949,7 @@ function boardBlock(b, mg, ctx) {
       !b.locked && b.scores?.game_date && h("span", { class: "meta" }, `Locks 5 min before kickoff (${lockTime(new Date(Date.parse(b.scores.game_date) - 5 * 60000))})`),
       b.scores?.state === "in" && h("span", { class: "status live" }, "Live"),
       btn("Save image", () => saveImage(sheet, b)),
+      canShareFiles() ? btn("Share image", () => shareImage(sheet, b)) : null,
       btn("Copy link", () => copy(link("#/b/" + b.id))),
       canEdit && btn("Scores", () => editScores(b, ctx, refresh)),
       !canEdit && canPull(ctx) && b.scores?.state !== "post" && b.scores?.state !== "manual" && !b.scores?.final && btn("Update score", () => viewerPull(b, refresh)),
@@ -1200,33 +1201,52 @@ async function deleteBoard(b) {
   } catch (e) { toast(e.message, true); }
 }
 
+// Renders the board to a PNG. mode "download" saves the file, "share" opens the share sheet.
+async function boardImage(sheet, b) {
+  await document.fonts?.ready;
+  const canvas = await html2canvas(sheet, {
+    scale: 2, backgroundColor: "#ffffff", useCORS: true,
+    windowWidth: SHEET_W + 40,
+    onclone: doc => {
+      const el = doc.querySelector(`[data-cap="${b.id}"]`);
+      if (!el) return;
+      el.classList.remove("edit");
+      el.style.cssText = "position:static;transform:none;box-shadow:none;margin:0";
+      doc.body.style.background = "#ffffff";
+      doc.body.replaceChildren(el);
+    }
+  });
+  const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
+  const name = (boardName(b) + (b.kickoff ? " " + b.kickoff : "")).replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") + ".png";
+  return { blob, name };
+}
+
 async function saveImage(sheet, b) {
   try {
-    await document.fonts?.ready;
-    const canvas = await html2canvas(sheet, {
-      scale: 2, backgroundColor: "#ffffff", useCORS: true,
-      windowWidth: SHEET_W + 40,
-      onclone: doc => {
-        const el = doc.querySelector(`[data-cap="${b.id}"]`);
-        if (!el) return;
-        el.classList.remove("edit");
-        el.style.cssText = "position:static;transform:none;box-shadow:none;margin:0";
-        doc.body.style.background = "#ffffff";
-        doc.body.replaceChildren(el);
-      }
-    });
-    const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
-    const fname = (boardName(b) + (b.kickoff ? " " + b.kickoff : "")).replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") + ".png";
-    const file = new File([blob], fname, { type: "image/png" });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: boardName(b) }); return; }
-      catch (e) { if (e.name === "AbortError") return; }
-    }
-    const a = h("a", { href: URL.createObjectURL(blob), download: fname });
+    const { blob, name } = await boardImage(sheet, b);
+    const a = h("a", { href: URL.createObjectURL(blob), download: name });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   } catch (e) { toast("Couldn't create the image: " + e.message, true); }
 }
+
+async function shareImage(sheet, b) {
+  try {
+    const { blob, name } = await boardImage(sheet, b);
+    const file = new File([blob], name, { type: "image/png" });
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: boardName(b) }); }
+      catch (e) { if (e.name !== "AbortError") toast("Couldn't share the image.", true); }
+      return;
+    }
+    toast("Sharing isn't available here. Use Save image instead.", true);
+  } catch (e) { toast("Couldn't create the image: " + e.message, true); }
+}
+
+const canShareFiles = () => {
+  try { return !!navigator.canShare?.({ files: [new File([new Blob()], "x.png", { type: "image/png" })] }); }
+  catch { return false; }
+};
 
 /* ---------- Start ---------- */
 (async () => {
