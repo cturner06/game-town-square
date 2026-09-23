@@ -946,7 +946,7 @@ function boardBlock(b, mg, ctx) {
   block.append(
     h("div", { class: "bar" },
       h("span", { class: "status " + (b.locked ? "locked" : "open") }, b.locked ? "Locked" : "Open"),
-      !b.locked && b.scores?.game_date && h("span", { class: "meta" }, `Locks 5 min before kickoff (${lockTime(new Date(Date.parse(b.scores.game_date) - 5 * 60000))})`),
+
       b.scores?.state === "in" && h("span", { class: "status live" }, "Live"),
       btn("Save image", () => saveImage(sheet, b)),
       canShareFiles() ? btn("Share image", () => shareImage(sheet, b)) : null,
@@ -961,7 +961,11 @@ function boardBlock(b, mg, ctx) {
       mg && !b.locked && ctx?.siblings > 1 && btn("Move down", () => reorderBoard(b, 1, ctx)),
       mg && !b.locked && btn("Delete", () => deleteBoard(b), "danger"),
       owner && btn("Helpers", () => go("#/b/" + b.id)),
-      b.locked_at ? h("span", { class: "lockstamp" }, `${b.locked_auto ? "Auto Locked" : "Locked"} ${lockTime(b.locked_at)}`) : null),
+      b.locked_at
+        ? h("span", { class: "lockstamp" }, `${b.locked_auto ? "Auto Locked" : "Locked"} ${lockTime(b.locked_at)}`)
+        : (b.scores?.game_date
+            ? h("span", { class: "lockstamp" }, `Auto locks ${lockTime(new Date(Date.parse(b.scores.game_date) - 5 * 60000))}`)
+            : null)),
     h("div", { class: "fit" }, sheet)
   );
   watchLive(b, ctx, mg, refresh);
@@ -1006,8 +1010,10 @@ function renderSheet(b, editable, refresh) {
   return h("div", { class: "sheet" + (editable ? " edit" : ""), "data-cap": b.id },
     b.managed_by_name && h("div", { class: "sheettop" }, h("span", {}, `Managed by ${b.managed_by_name}`)),
     h("div", { class: "kick" }, b.kickoff),
-    sc.detail && h("div", { class: "gstat" + (sc.state === "in" ? " on" : "") },
-      `${sc.detail}: ${b.top_team} ${sc.top_now}, ${b.side_team} ${sc.side_now}`),
+    (sc.state === "pre" && sc.game_date)
+      ? h("div", { class: "gstat" }, `Kickoff ${lockTime(sc.game_date)}`)
+      : (sc.detail ? h("div", { class: "gstat" + (sc.state === "in" ? " on" : "") },
+          `${sc.detail}: ${b.top_team} ${sc.top_now}, ${b.side_team} ${sc.side_now}`) : null),
     h("div", { class: "shead" }, h("div", { class: "title" }, `${b.sport ? b.sport + " " : ""}Squares`), h("div", { class: "price" }, `${money(b.price)} per square`)),
     h("div", { class: "smain" }, grid,
       h("div", { class: "pay" }, SLOTS.map(([k, lbl]) => {
