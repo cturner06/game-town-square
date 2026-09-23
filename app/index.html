@@ -44,6 +44,7 @@ button,input{font:inherit}
 .who span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .whoname{background:none;border:0;color:inherit;font:inherit;padding:4px 0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;text-decoration:underline dotted;text-underline-offset:3px}
 .sheettop{display:flex;justify-content:space-between;gap:12px;font:700 15px/1.2 var(--ui);color:#444;margin-bottom:-18px}
+.lockstamp{margin-left:auto;font-size:14px;font-weight:700;color:var(--chalk-dim);white-space:nowrap}
 .who .btn{white-space:nowrap;flex-shrink:0}
 .wrap{max-width:1040px;margin:0 auto;padding:18px 16px 60px}
 h1{font:800 42px/1 var(--display);margin:6px 0 4px;letter-spacing:.3px}
@@ -181,9 +182,15 @@ function h(tag, attrs = {}, ...kids) {
 const btn = (label, fn, cls = "") => h("button", { class: "btn " + cls, type: "button", onclick: fn }, label);
 const money = n => Number(n || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
 // When the board was locked, in the reader's own time zone
+// Every time in the app is Central, wherever the reader is
+const TZ = "America/Chicago";
 const lockTime = t => {
   const d = new Date(t);
-  return isNaN(d) ? "" : d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  if (isNaN(d)) return "";
+  const when = d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: TZ });
+  const zone = new Intl.DateTimeFormat("en-US", { timeZone: TZ, timeZoneName: "short" })
+    .formatToParts(d).find(p => p.type === "timeZoneName")?.value || "CT";
+  return `${when} ${zone}`;
 };
 const boardName = b => [b.top_team, b.side_team].filter(Boolean).join(" vs ") || "Untitled board";
 const link = hash => location.origin + location.pathname + hash;
@@ -952,7 +959,8 @@ function boardBlock(b, mg, ctx) {
       mg && !b.locked && ctx?.siblings > 1 && btn("Move up", () => reorderBoard(b, -1, ctx)),
       mg && !b.locked && ctx?.siblings > 1 && btn("Move down", () => reorderBoard(b, 1, ctx)),
       mg && !b.locked && btn("Delete", () => deleteBoard(b), "danger"),
-      owner && btn("Helpers", () => go("#/b/" + b.id))),
+      owner && btn("Helpers", () => go("#/b/" + b.id)),
+      b.locked_at ? h("span", { class: "lockstamp" }, `${b.locked_auto ? "Auto Locked" : "Locked"} ${lockTime(b.locked_at)}`) : null),
     h("div", { class: "fit" }, sheet)
   );
   watchLive(b, ctx, mg, refresh);
@@ -995,9 +1003,7 @@ function renderSheet(b, editable, refresh) {
     }, wins && h("span", { class: "wb" }, wins.join(" ")), h("span", { class: "nm" }, b.squares[idx - 1] || ""), h("span", { class: "no" }, idx)));
   }
   return h("div", { class: "sheet" + (editable ? " edit" : ""), "data-cap": b.id },
-    (b.managed_by_name || b.locked_at) && h("div", { class: "sheettop" },
-      h("span", {}, b.managed_by_name ? `Managed by ${b.managed_by_name}` : ""),
-      h("span", {}, b.locked_at ? `Locked ${lockTime(b.locked_at)}` : "")),
+    b.managed_by_name && h("div", { class: "sheettop" }, h("span", {}, `Managed by ${b.managed_by_name}`)),
     h("div", { class: "kick" }, b.kickoff),
     sc.detail && h("div", { class: "gstat" + (sc.state === "in" ? " on" : "") },
       `${sc.detail}: ${b.top_team} ${sc.top_now}, ${b.side_team} ${sc.side_now}`),
