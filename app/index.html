@@ -44,6 +44,7 @@ button,input{font:inherit}
 .who span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .whoname{background:none;border:0;color:inherit;font:inherit;padding:4px 0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;text-decoration:underline dotted;text-underline-offset:3px}
 .sheettop{display:flex;justify-content:space-between;gap:12px;font:700 15px/1.2 var(--ui);color:#444;margin-bottom:-18px}
+.sheettop .stamps{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font:600 13px/1.25 var(--ui);color:#666;text-align:right}
 .lockstamp{margin-left:auto;font-size:14px;font-weight:700;color:var(--chalk-dim);white-space:nowrap}
 .who .btn{white-space:nowrap;flex-shrink:0}
 .wrap{max-width:1040px;margin:0 auto;padding:18px 16px 60px}
@@ -201,6 +202,7 @@ const money = n => Number(n || 0).toLocaleString("en-US", { style: "currency", c
 // When the board was locked, in the reader's own time zone
 // Every time in the app is Central, wherever the reader is
 const TZ = "America/Chicago";
+const kickoffOf = b => b.kickoff_at || b.scores?.game_date || null;
 const lockTime = t => {
   const d = new Date(t);
   if (isNaN(d)) return "";
@@ -922,13 +924,16 @@ function watchLive(b, ctx, mg, refresh) {
 }
 function scheduleWatch() {
   const fast = [...WATCH.values()].some(({ b }) => {
-    const sc = b.scores || {}, start = Date.parse(sc.game_date || "");
-    return sc.state === "in" || (Number.isFinite(start) && start - Date.now() < 15 * 60000);
+    const sc = b.scores || {}, start = Date.parse(kickoffOf(b) || "");
+    return sc.state === "in" || (Number.isFinite(start) && start - Date.now() < 20 * 60000);
   });
   const ms = !WATCH.size ? 0 : fast ? FAST_MS : SLOW_MS;
   if (ms === WATCH_MS) return;
   clearInterval(WATCH_TIMER); WATCH_TIMER = ms ? setInterval(pollWatched, ms) : null; WATCH_MS = ms;
 }
+// Anything a viewer should see redraw: scores, the lock, and the drawn numbers
+const boardSig = b => JSON.stringify([b.scores, b.locked, b.locked_at, b.locked_auto, b.unlocked_at,
+  b.numbers_auto_at, b.top_nums, b.side_nums]);
 async function pollWatched() {
   const ids = [...WATCH.keys()];
   if (!ids.length) return;
@@ -938,7 +943,10 @@ async function pollWatched() {
     if (error || !data?.boards) return;
     for (const row of data.boards) {
       const w = WATCH.get(row.id);
-      if (w && !row.error && JSON.stringify(row.scores) !== JSON.stringify(w.b.scores)) w.refresh(row);
+      if (!w || row.error || boardSig(row) === boardSig(w.b)) continue;
+      const justLocked = row.locked && !w.b.locked;
+      w.refresh(row);
+      if (justLocked) toast(row.numbers_auto_at ? "Board locked. Numbers are drawn." : "Board locked.");
     }
   } catch { /* try again next round */ }
 }
@@ -972,7 +980,7 @@ function boardBlock(b, mg, ctx) {
       !canEdit && canPull(ctx) && b.scores?.state !== "post" && b.scores?.state !== "manual" && !b.scores?.final && btn("Update score", () => viewerPull(b, refresh)),
       mg && !b.locked && btn("Edit details", () => editDetails(b, refresh)),
       editable && btn("Lock board", () => lockBoard(b, refresh)),
-      b.locked && isSuper() && btn("Unlock", () => unlockBoard(b, refresh), "primary"),
+      b.locked && S.me?.is_owner && btn("Unlock", () => unlockBoard(b, refresh), "primary"),
       mg && !b.locked && btn("Move board", () => moveBoard(b, ctx)),
       mg && !b.locked && ctx?.siblings > 1 && btn("Move up", () => reorderBoard(b, -1, ctx)),
       mg && !b.locked && ctx?.siblings > 1 && btn("Move down", () => reorderBoard(b, 1, ctx)),
@@ -980,8 +988,8 @@ function boardBlock(b, mg, ctx) {
       owner && btn("Helpers", () => go("#/b/" + b.id)),
       b.locked_at
         ? h("span", { class: "lockstamp" }, `${b.locked_auto ? "Auto Locked" : "Locked"} ${lockTime(b.locked_at)}`)
-        : (b.scores?.game_date
-            ? h("span", { class: "lockstamp" }, `Auto locks ${lockTime(new Date(Date.parse(b.scores.game_date) - 5 * 60000))}`)
+        : (kickoffOf(b)
+            ? h("span", { class: "lockstamp" }, `Auto locks ${lockTime(new Date(Date.parse(kickoffOf(b)) - 15 * 60000))}`)
             : null)),
     h("div", { class: "fit" }, sheet)
   );
@@ -1025,10 +1033,14 @@ function renderSheet(b, editable, refresh) {
     }, wins && h("span", { class: "wb" }, wins.join(" ")), h("span", { class: "nm" }, b.squares[idx - 1] || ""), h("span", { class: "no" }, idx)));
   }
   return h("div", { class: "sheet" + (editable ? " edit" : ""), "data-cap": b.id },
-    b.managed_by_name && h("div", { class: "sheettop" }, h("span", {}, `Managed by ${b.managed_by_name}`)),
+    (b.managed_by_name || b.numbers_auto_at || b.unlocked_at) && h("div", { class: "sheettop" },
+      h("span", {}, b.managed_by_name ? `Managed by ${b.managed_by_name}` : ""),
+      h("span", { class: "stamps" },
+        b.numbers_auto_at ? h("span", {}, `Numbers drawn by auto-lock ${lockTime(b.numbers_auto_at)}`) : null,
+        b.unlocked_at ? h("span", {}, `Unlocked by the Board Master ${lockTime(b.unlocked_at)}`) : null)),
     h("div", { class: "kick" }, b.kickoff),
-    (sc.state === "pre" && sc.game_date)
-      ? h("div", { class: "gstat" }, `Kickoff ${lockTime(sc.game_date)}`)
+    (sc.state === "pre" && kickoffOf(b))
+      ? h("div", { class: "gstat" }, `Kickoff ${lockTime(kickoffOf(b))}`)
       : (sc.detail ? h("div", { class: "gstat" + (sc.state === "in" ? " on" : "") },
           `${sc.detail}: ${b.top_team} ${sc.top_now}, ${b.side_team} ${sc.side_now}`) : null),
     h("div", { class: "shead" }, h("div", { class: "title" }, `${b.sport ? b.sport + " " : ""}Squares`), h("div", { class: "price" }, `${money(b.price)} per square`)),
@@ -1172,8 +1184,8 @@ async function lockBoard(b, refresh) {
 }
 
 async function unlockBoard(b, refresh) {
-  if (!isSuper()) return toast("Only the super admin can unlock a board.", true);
-  const v = await modal({ title: "Unlock board", text: "Enter your super admin password to unlock.",
+  if (!S.me?.is_owner) return toast("Only the Board Master can unlock a board.", true);
+  const v = await modal({ title: "Unlock board", text: "Enter your password to unlock. The board will show that the Board Master unlocked it.",
     fields: [{ name: "pw", label: "Password", type: "password", autocomplete: "current-password", required: true }], ok: "Unlock" });
   if (!v) return;
   const { error } = await sb.auth.signInWithPassword({ email: S.session.user.email, password: v.pw });
