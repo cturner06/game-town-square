@@ -931,9 +931,13 @@ function scheduleWatch() {
   if (ms === WATCH_MS) return;
   clearInterval(WATCH_TIMER); WATCH_TIMER = ms ? setInterval(pollWatched, ms) : null; WATCH_MS = ms;
 }
-// Anything a viewer should see redraw: scores, the lock, and the drawn numbers
-const boardSig = b => JSON.stringify([b.scores, b.locked, b.locked_at, b.locked_auto, b.unlocked_at,
-  b.numbers_auto_at, b.top_nums, b.side_nums]);
+// Only what a viewer would actually see. The time of the last ESPN check changes
+// on every check, so it's left out or the board would redraw for nothing.
+const boardSig = b => {
+  const sc = b.scores || {};
+  return JSON.stringify([sc.q1, sc.q2, sc.q3, sc.final, sc.state, sc.detail, sc.top_now, sc.side_now, sc.note,
+    b.locked, b.locked_at, b.locked_auto, b.unlocked_at, b.numbers_auto_at, b.top_nums, b.side_nums]);
+};
 async function pollWatched() {
   const ids = [...WATCH.keys()];
   if (!ids.length) return;
