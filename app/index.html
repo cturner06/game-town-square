@@ -502,7 +502,8 @@ async function viewHome() {
     isSuper() && h("div", { class: "actions" }, btn("New community", newCommunity, "primary"),
       h("a", { class: "btn", href: "#/people" }, "People")),
     isPlayerOnly ? null : list.length
-      ? h("ul", { class: "list" }, list.map(c => h("li", {}, h("a", { href: "#/c/" + c.id }, c.name))))
+      ? h("ul", { class: "list" }, list.map(c => h("li", {}, h("a", { href: "#/c/" + c.id }, c.name),
+          isSuper() && btn("Rename", () => renameCommunity(c)))))
       : h("p", { class: "empty" }, isSuper()
           ? "Create a community to start adding board sets."
           : `You aren't an admin on any community yet. Ask the super admin to add ${S.me.email}.`)
@@ -657,7 +658,8 @@ async function viewCommunity(id) {
           h("ul", { class: "list" }, ws.map(w => h("li", {},
             h("div", {}, h("a", { href: "#/w/" + w.id }, w.label),
               h("div", { class: "meta" }, countOf(w.board_sets.length, "board set"))),
-            btn("Delete", () => deleteWeek(w), "danger"))))])
+            h("div", { class: "actions", style: "margin:0;flex-wrap:nowrap" },
+              btn("Edit", () => editWeek(w)), btn("Delete", () => deleteWeek(w), "danger")))))])
       : h("p", { class: "empty" }, "No game weeks yet. Create one, then add a board set for each game day in it.")
   ];
 
@@ -787,16 +789,44 @@ async function viewWeek(id) {
           return h("li", {},
             h("div", {}, h("a", { href: "#/s/" + s.id }, s.name),
               h("div", { class: "meta" }, countOf(s.boards.length, "board") + (locked ? `, ${locked} locked` : ""))),
-            mg && btn("Delete", () => deleteSet(s), "danger"));
+            mg && h("div", { class: "actions", style: "margin:0;flex-wrap:nowrap" },
+              btn("Rename", () => renameSet(s)), btn("Delete", () => deleteSet(s), "danger")));
         }))
       : h("p", { class: "empty" }, mg ? "Add a board set for each game day this week, like Saturday or Sunday." : "No boards posted for this week yet."),
     mg && h("div", { class: "actions", style: "margin-top:28px" }, btn("Delete week", () => deleteWeek(w), "danger"))
   );
 }
 
+// Default board set name: day of the week and the date, no year ("Saturday Oct 3rd")
+const ordinal = n => n + ((n % 100 >= 11 && n % 100 <= 13) ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
+function gameDayName(iso) {
+  const [y, m, d] = String(iso).split("-").map(Number);
+  if (!y || !m || !d) return "";
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return `${dt.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" })} ${dt.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })} ${ordinal(d)}`;
+}
+// Starting date: a date-based week's own date; otherwise the next Saturday (college) or Sunday (NFL)
+function defaultGameDay(w) {
+  const k = String(w.sort_key || "");
+  if (/^\d{8}$/.test(k)) return `${k.slice(0, 4)}-${k.slice(4, 6)}-${k.slice(6)}`;
+  const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
+  const want = w.league === "NFL" ? 0 : w.league === "College Football" ? 6 : null;
+  if (want != null) now.setUTCDate(now.getUTCDate() + ((want - now.getUTCDay() + 7) % 7));
+  return now.toISOString().slice(0, 10);
+}
 async function newSet(w) {
-  const v = await modal({ title: "New board set", text: `Group the boards for one game day in ${w.label}.`,
-    fields: [{ name: "name", label: "Set name", placeholder: "Saturday", required: true, maxlength: 80 }], ok: "Create set" });
+  const day = defaultGameDay(w);
+  const v = await modal({ title: "New board set", text: `Group the boards for one game day in ${w.label}. Pick the date and the name fills in. You can change the name.`,
+    fields: [
+      { name: "date", label: "Game day", type: "date", value: day },
+      { name: "name", label: "Set name", value: gameDayName(day), required: true, maxlength: 80 }
+    ], ok: "Create set",
+    after: inputs => {
+      let auto = inputs.name.value;
+      inputs.date.addEventListener("change", () => {
+        if (inputs.name.value === auto) { auto = gameDayName(inputs.date.value); inputs.name.value = auto; }
+      });
+    } });
   if (!v || !v.name.trim()) return;
   try {
     const row = must(await sb.from("board_sets").insert({ community_id: w.community_id, week_id: w.id, name: v.name.trim() }).select().single());
@@ -816,8 +846,14 @@ async function moveSet(set) {
 }
 
 async function renameSet(set) {
-  const v = await modal({ title: "Rename board set",
-    fields: [{ name: "name", label: "Set name", value: set.name, required: true, maxlength: 80 }], ok: "Save name" });
+  const v = await modal({ title: "Rename board set", text: "Type a name, or pick a game day to fill it in.",
+    fields: [
+      { name: "date", label: "Game day", type: "date", value: "" },
+      { name: "name", label: "Set name", value: set.name, required: true, maxlength: 80 }
+    ], ok: "Save name",
+    after: inputs => inputs.date.addEventListener("change", () => {
+      const n = gameDayName(inputs.date.value); if (n) inputs.name.value = n;
+    }) });
   if (!v || !v.name.trim()) return;
   try { must(await sb.from("board_sets").update({ name: v.name.trim() }).eq("id", set.id)); route(); }
   catch (e) { toast(e.message, true); }
@@ -1545,6 +1581,12 @@ async function deletePoolNow(pool) {
   try { must(await sb.from("pools").delete().eq("id", pool.id)); go("#/c/" + pool.community_id); }
   catch (e) { toast(e.message, true); }
 }
+async function renamePool(pool) {
+  const v = await modal({ title: "Rename pool", fields: [{ name: "name", label: "Pool name", value: pool.name, required: true, maxlength: 60 }], ok: "Save name" });
+  if (!v || !v.name.trim()) return;
+  try { must(await sb.from("pools").update({ name: v.name.trim() }).eq("id", pool.id)); route(); }
+  catch (e) { toast(e.message, true); }
+}
 const poolKindLabel = p => p.kind === "bowl" ? "Bowl pick'em" : "College Football Playoff";
 
 async function joinFromLink(code) {
@@ -1682,6 +1724,7 @@ async function viewPool(id) {
       btn("Copy pool link", () => copy(link("#/p/" + id))),
       mg && btn("Copy invite link", copyInvite, "primary"),
       mg && !st.locked && btn(pool.loaded_at ? "Reload bracket from ESPN" : "Load bracket from ESPN", loadBracket, pool.loaded_at ? "" : "primary"),
+      mg && btn("Rename pool", () => renamePool(pool)),
       mg && btn("Delete pool", deletePool, "danger")),
     !S.poolsOn && mg && h("p", { class: "meta" }, "Hidden. Only you can see this pool until bracket pools are turned on."),
     pool.loaded_at
@@ -1803,6 +1846,7 @@ async function viewBowlPool(pool) {
       btn("Copy pool link", () => copy(link("#/p/" + id))),
       mg && btn("Copy invite link", () => copyPoolInvite(id), "primary"),
       mg && !started && btn(pool.loaded_at ? "Reload bowls from ESPN" : "Load bowls from ESPN", () => loadPoolGames(pool), pool.loaded_at ? "" : "primary"),
+      mg && btn("Rename pool", () => renamePool(pool)),
       mg && btn("Delete pool", () => deletePoolNow(pool), "danger")),
     !S.poolsOn && mg && h("p", { class: "meta" }, "Hidden. Only you can see this pool until bracket pools are turned on."),
     pool.loaded_at
