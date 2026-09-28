@@ -144,6 +144,36 @@ h2{font:700 20px/1.2 var(--ui);margin:28px 0 10px}
 .pay span{margin:auto 0;text-align:center;font:700 20px var(--ui);color:#666}
 .foot{text-align:center;font:700 34px/1.2 var(--hand);margin-top:8px;letter-spacing:1px}
 
+/* ---------- Bracket pools ---------- */
+.switch{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;margin:12px 0;border-radius:10px;background:rgba(242,182,29,.12);box-shadow:inset 0 0 0 1px rgba(242,182,29,.45)}
+.pstat{font-weight:700;margin:6px 0 2px}
+.pstat.open{color:#B9E6BC}.pstat.shut{color:#FFC9C4}
+.rounds{display:grid;gap:18px}
+.games{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.game{padding:10px;border-radius:12px;background:rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.18), inset 0 0 0 1px rgba(255,255,255,.1)}
+.game .gh{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--chalk-dim);margin-bottom:6px}
+.pick{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;margin:4px 0;padding:6px 10px;border:0;border-radius:8px;text-align:left;font-weight:600;color:var(--chalk);background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+button.pick{cursor:pointer}
+button.pick:hover{background:rgba(255,255,255,.12)}
+.pick .bar{width:6px;align-self:stretch;border-radius:3px;flex-shrink:0}
+.pick .sd{font:800 18px/1 var(--display);color:var(--chalk-dim);min-width:22px}
+.pick.on{background:rgba(88,132,255,.35);box-shadow:inset 0 0 0 2px rgba(150,180,255,.8)}
+.pick.won{background:rgba(46,125,50,.3)}
+.pick.tbd{color:var(--chalk-dim);font-weight:400;font-style:italic}
+.pick .ck{margin-left:auto;font-weight:800}
+.mine{font-size:14px;margin-top:6px;color:var(--chalk-dim)}
+.mine .right{color:#B9E6BC;font-weight:700}.mine .wrong{color:#FFC9C4;font-weight:700;text-decoration:line-through}
+.game .blink{display:inline-block;margin-top:6px;font-size:14px;font-weight:600}
+.savebar{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:16px;padding:10px 12px;border-radius:12px;background:rgba(43,33,27,.92);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18), 0 6px 18px rgba(0,0,0,.4)}
+.savebar input{width:90px;min-height:42px;padding:8px;border-radius:8px;border:0;font-size:16px}
+.savebar label{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+.savebar .btn{margin-left:auto}
+.stand{width:100%;border-collapse:collapse;font-size:15px}
+.stand th{text-align:left;font-size:13px;color:var(--chalk-dim);font-weight:600;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.2)}
+.stand td{padding:9px 8px;border-bottom:1px solid rgba(255,255,255,.08)}
+.stand td.n{text-align:right;font-variant-numeric:tabular-nums}
+.tscroll{overflow-x:auto}
+
 /* ---------- Modal & toast ---------- */
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:50;padding:12px}
 @media (min-width:640px){.scrim{align-items:center}}
@@ -215,6 +245,7 @@ const boardName = b => [b.top_team, b.side_team].filter(Boolean).join(" vs ") ||
 const link = hash => location.origin + location.pathname + hash;
 const isSuper = () => !!(S.me && S.me.is_super_admin);
 const canManage = cid => !!S.me && (isSuper() || S.admin.has(cid));
+const poolsShown = () => S.poolsOn || !!S.me?.is_owner;   // the owner sees pools before they're turned on
 function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
 function textOn(hex) {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
@@ -277,6 +308,9 @@ const confirmBox = (title, text, ok, okClass = "danger") => modal({ title, text,
 
 /* ---------- Auth state ---------- */
 async function loadMe() {
+  // Bracket pools switch (the owner turns it on for everyone)
+  const sw = await sb.from("app_settings").select("value").eq("key", "pools_enabled").maybeSingle();
+  S.poolsOn = sw.data?.value === true;
   S.session = must(await sb.auth.getSession()).session;
   S.me = null; S.admin = new Set();
   if (!S.session) return;
@@ -330,6 +364,8 @@ async function route() {
     if (key === "b" && id) return await viewBoard(id);
     if (key === "s" && id) return await viewSet(id);
     if (key === "w" && id) return await viewWeek(id);
+    if (key === "p" && id) return await viewPool(id);
+    if (key === "j" && id) return await joinFromLink(id);
     if (key === "login" || !S.session) return viewLogin();
     if (key === "c" && id) return await viewCommunity(id);
     if (key === "people") return await viewPeople();
@@ -362,20 +398,24 @@ function viewLogin(mode = "signin") {
     if (!creating) {
       const { error } = await sb.auth.signInWithPassword({ email: email.value.trim(), password: pass.value });
       if (error) return toast(error.message, true);
-      await loadMe(); return go("#/");
+      await loadMe(); return go(afterLogin());
     }
     if (!first.value.trim() || !last.value.trim()) return toast("Enter your first and last name.", true);
     if (pass.value.length < 6) return toast("Use a password of 6 or more characters.", true);
     const { data, error } = await sb.auth.signUp({ email: email.value.trim(), password: pass.value,
-      options: { data: { first_name: first.value.trim(), last_name: last.value.trim(), nickname: nick.value.trim() } } });
+      options: { data: { first_name: first.value.trim(), last_name: last.value.trim(), nickname: nick.value.trim() },
+                 emailRedirectTo: link(nextHash() || "#/") } });
     if (error) return toast(error.message, true);
     if (!data.session) return toast("Check your email to confirm your login, then sign in.");
-    await loadMe(); go("#/");
+    await loadMe(); go(afterLogin());
   };
   const field = (label, el, half) => h("label", { class: half ? "half" : "" }, h("span", {}, label), el);
+  const joining = /^#\/j\//.test(nextHash());
   $app.replaceChildren(topbar(), h("div", { class: "panel" },
-    h("h1", {}, creating ? "Create login" : "Admin sign in"),
-    h("p", {}, creating ? "For people running boards. Your name shows on the boards you manage."
+    h("h1", {}, creating ? "Create login" : joining ? "Sign in to join" : "Admin sign in"),
+    h("p", {}, joining ? (creating ? "Create a login to make your bracket picks. Your name shows on the leaderboard."
+                                   : "Sign in to join the pool and make your picks. New here? Tap Create login.")
+             : creating ? "For people running boards. Your name shows on the boards you manage."
                         : "Viewers don't need to sign in. Just open the board link you were sent."),
     h("form", { class: "mform", onsubmit: submit },
       creating && [field("First name", first, true), field("Last name", last, true), field("What should we call you?", nick)],
@@ -410,11 +450,21 @@ async function signOut() { await sb.auth.signOut(); await loadMe(); go("#/login"
 async function viewHome() {
   const all = must(await sb.from("communities").select("id,name").order("name"));
   const list = isSuper() ? all : all.filter(c => S.admin.has(c.id));
+  const mine = poolsShown() ? (must(await sb.rpc("my_pools")) || []) : [];
+  const isPlayerOnly = !list.length && mine.length;
   render(
-    h("h1", {}, "Communities"),
+    S.me?.is_owner && h("div", { class: "switch" },
+      h("div", {}, h("b", {}, `Bracket pools are ${S.poolsOn ? "on" : "off"}. `),
+        h("span", { class: "meta" }, S.poolsOn ? "Admins and players can see them." : "Only you can see them.")),
+      btn(S.poolsOn ? "Turn off" : "Turn on for everyone", togglePools, S.poolsOn ? "danger" : "primary")),
+    mine.length ? [h("h1", {}, "My pools"),
+      h("ul", { class: "list" }, mine.map(p => h("li", {},
+        h("div", {}, h("a", { href: "#/p/" + p.pool_id }, p.name),
+          h("div", { class: "meta" }, `College Football Playoff ${seasonLabel("College Football", p.season)}: ${p.picks_done} of 11 picked`)))))] : null,
+    isPlayerOnly ? null : h("h1", {}, "Communities"),
     isSuper() && h("div", { class: "actions" }, btn("New community", newCommunity, "primary"),
       h("a", { class: "btn", href: "#/people" }, "People")),
-    list.length
+    isPlayerOnly ? null : list.length
       ? h("ul", { class: "list" }, list.map(c => h("li", {}, h("a", { href: "#/c/" + c.id }, c.name))))
       : h("p", { class: "empty" }, isSuper()
           ? "Create a community to start adding board sets."
@@ -573,6 +623,19 @@ async function viewCommunity(id) {
             btn("Delete", () => deleteWeek(w), "danger"))))])
       : h("p", { class: "empty" }, "No game weeks yet. Create one, then add a board set for each game day in it.")
   ];
+
+  if (poolsShown()) {
+    const pools = must(await sb.from("pools").select("id,name,season,loaded_at,picks_lock_at").eq("community_id", id).order("season", { ascending: false }).order("created_at"));
+    nodes.push(
+      h("h2", {}, "Bracket pools"),
+      !S.poolsOn && h("p", { class: "meta" }, "Hidden. Only you can see pools until you turn them on from the home screen."),
+      h("div", { class: "actions" }, btn("New CFP pool", () => newPool(id), "primary")),
+      pools.length
+        ? h("ul", { class: "list" }, pools.map(p => h("li", {},
+            h("div", {}, h("a", { href: "#/p/" + p.id }, p.name),
+              h("div", { class: "meta" }, `College Football Playoff ${seasonLabel("College Football", p.season)}: ${poolState(p).text}`)))))
+        : h("p", { class: "empty" }, "No pools yet."));
+  }
 
   if (isSuper()) {
     const admins = must(await sb.from("community_admins").select("user_id, profiles(email)").eq("community_id", id));
@@ -1311,6 +1374,209 @@ const canShareFiles = () => {
   try { return !!navigator.canShare?.({ files: [new File([new Blob()], "x.png", { type: "image/png" })] }); }
   catch { return false; }
 };
+
+/* ---------- Bracket pools (College Football Playoff) ----------
+   12 teams from ESPN. Players pick every game; 10/20/40/80 points by round.
+   Each game gets a squares board, and winners move up on their own. */
+const ROUND_NAMES = ["First Round", "Quarterfinals", "Semifinals", "National Championship"];
+const NEXT_KEY = "gts-next";
+function nextHash() { try { return S.next || sessionStorage.getItem(NEXT_KEY) || ""; } catch { return S.next || ""; } }
+function setNext(hash) { S.next = hash; try { hash ? sessionStorage.setItem(NEXT_KEY, hash) : sessionStorage.removeItem(NEXT_KEY); } catch {} }
+function afterLogin() { const n = nextHash(); setNext(""); return n || "#/"; }
+
+async function togglePools() {
+  const on = !S.poolsOn;
+  if (!await confirmBox(on ? "Turn on bracket pools?" : "Turn off bracket pools?",
+    on ? "Admins will see bracket pools in their communities, and invite links will work for players."
+       : "Pools, invite links and standings will be hidden from everyone but you.",
+    on ? "Turn on" : "Turn off", on ? "primary" : "danger")) return;
+  try {
+    must(await sb.from("app_settings").update({ value: on, updated_at: new Date().toISOString() }).eq("key", "pools_enabled"));
+    await loadMe(); route(); toast(on ? "Bracket pools are on" : "Bracket pools are off");
+  } catch (e) { toast(e.message, true); }
+}
+
+function poolState(p) {
+  if (!p.loaded_at) return { open: false, locked: false, text: "Waiting for the bracket" };
+  const lock = Date.parse(p.picks_lock_at || "");
+  if (Number.isFinite(lock) && lock <= Date.now()) return { open: false, locked: true, text: "Picks locked" };
+  return { open: true, locked: false, text: `Picks open until ${lockTime(p.picks_lock_at)}` };
+}
+
+async function newPool(cid) {
+  const season = currentSeason();
+  const v = await modal({ title: "New CFP pool", text: "After the bracket is announced, open the pool and tap Load bracket from ESPN.",
+    fields: [
+      { name: "name", label: "Pool name", value: `CFP Bracket Pool ${seasonLabel("College Football", season)}`, required: true, maxlength: 60 },
+      { name: "season", label: "Season", type: "number", value: season, min: 2024, max: 2100, required: true, inputmode: "numeric" }
+    ], ok: "Create pool" });
+  if (!v || !v.name.trim()) return;
+  try {
+    const row = must(await sb.from("pools").insert({ community_id: cid, name: v.name.trim(), season: Number(v.season) }).select("id").single());
+    go("#/p/" + row.id);
+  } catch (e) { toast(e.message, true); }
+}
+
+async function joinFromLink(code) {
+  if (!S.session) { setNext("#/j/" + code); return viewLogin(); }
+  try {
+    const pid = must(await sb.rpc("join_pool", { code }));
+    go("#/p/" + pid);
+  } catch (e) { render(h("p", { class: "err" }, e.message)); }
+}
+
+async function viewPool(id) {
+  const pool = must(await sb.from("pools").select("id,community_id,name,season,teams,picks_lock_at,loaded_at").eq("id", id).maybeSingle());
+  if (!pool) throw new Error("Pool not found. Check the link.");
+  const games = must(await sb.from("pool_games").select("*").eq("pool_id", id).order("slot"));
+  const standings = must(await sb.rpc("pool_standings", { pid: id })) || [];
+  const entry = S.me ? must(await sb.from("pool_entries").select("*").eq("pool_id", id).eq("user_id", S.me.id).maybeSingle()) : null;
+  const mg = canManage(pool.community_id);
+  const st = poolState(pool);
+  const team = seed => (pool.teams || []).find(t => t.seed === seed);
+  const colorOf = t => t?.color || findTeam(t?.name)?.[2] || "#888";
+  const G = Object.fromEntries(games.map(g => [g.slot, g]));
+  const picks = { ...(entry?.picks || {}) };
+  let tb = entry?.tiebreak ?? "";
+  const editing = !!entry && st.open;
+
+  // Who can win a game in this player's own bracket
+  const pickSide = (g, which) => {
+    const from = g[which + "_from"];
+    return from ? (picks[from] ?? null) : g[which + "_seed"];
+  };
+  const actualSide = (g, which) => g[which + "_seed"];
+  const dropStale = () => {
+    for (const g of games) {
+      const p = picks[g.slot];
+      if (p != null && p !== pickSide(g, "top") && p !== pickSide(g, "bottom")) delete picks[g.slot];
+    }
+  };
+
+  const bracketEl = h("div", { class: "rounds" });
+  const countEl = h("span", { class: "meta" });
+  function teamRow(seed, fromSlot, opts = {}) {
+    const t = team(seed);
+    if (seed == null || !t) return h("div", { class: "pick tbd" }, h("span", { class: "bar", style: "background:transparent" }),
+      fromSlot ? `Winner of game ${fromSlot}` : "To be decided");
+    const kids = [h("span", { class: "bar", style: "background:" + colorOf(t) }), h("span", { class: "sd" }, seed), t.name,
+      opts.won ? h("span", { class: "ck", "aria-label": "Won" }, "✓") : null];
+    const cls = "pick" + (opts.on ? " on" : "") + (opts.won ? " won" : "");
+    return opts.onclick ? h("button", { type: "button", class: cls, "aria-pressed": opts.on ? "true" : "false", onclick: opts.onclick }, kids)
+                        : h("div", { class: cls }, kids);
+  }
+  function gameCard(g) {
+    const when = g.game_date ? lockTime(g.game_date) : "";
+    const head = h("div", { class: "gh" }, h("span", {}, `Game ${g.slot}`), h("span", {}, when));
+    if (editing) {
+      const a = pickSide(g, "top"), b = pickSide(g, "bottom");
+      const choose = seed => () => { picks[g.slot] = seed; dropStale(); draw(); };
+      return h("div", { class: "game" }, head,
+        teamRow(a, g.top_from, { on: a != null && picks[g.slot] === a, onclick: a != null && choose(a) }),
+        teamRow(b, g.bottom_from, { on: b != null && picks[g.slot] === b, onclick: b != null && choose(b) }));
+    }
+    // Locked or just watching: the real bracket, with this player's pick under it
+    const a = actualSide(g, "top"), b = actualSide(g, "bottom"), mine = picks[g.slot];
+    const mt = team(mine);
+    return h("div", { class: "game" }, head,
+      teamRow(a, g.top_from, { won: g.winner_seed != null && g.winner_seed === a }),
+      teamRow(b, g.bottom_from, { won: g.winner_seed != null && g.winner_seed === b }),
+      entry && h("div", { class: "mine" }, "Your pick: ",
+        mt ? h("span", { class: g.winner_seed == null ? "" : g.winner_seed === mine ? "right" : "wrong" }, `#${mine} ${mt.name}`) : "none"),
+      g.board_id && h("a", { class: "blink", href: "#/b/" + g.board_id }, "Squares board"));
+  }
+  function draw() {
+    bracketEl.replaceChildren(...[1, 2, 3, 4].map(r => h("section", {},
+      h("h2", {}, `${ROUND_NAMES[r - 1]} (${10 * 2 ** (r - 1)} points${r < 4 ? " each" : ""})`),
+      h("div", { class: "games" }, games.filter(g => g.round === r).map(gameCard)))));
+    countEl.textContent = `${Object.keys(picks).length} of 11 picked`;
+  }
+
+  async function save() {
+    const n = tbInput.value.trim() === "" ? null : Number(tbInput.value);
+    if (n != null && !(Number.isInteger(n) && n >= 0 && n <= 200)) return toast("Tiebreaker must be a whole number, 0 to 200.", true);
+    try {
+      must(await sb.rpc("save_picks", { pid: id, picks, tb: n }));
+      toast(Object.keys(picks).length === 11 ? "Picks saved" : `Saved. ${11 - Object.keys(picks).length} games still to pick.`);
+    } catch (e) { toast(e.message, true); }
+  }
+  const tbInput = h("input", { type: "number", inputmode: "numeric", min: 0, max: 200, value: tb, "aria-label": "Tiebreaker: total points in the title game" });
+
+  async function loadBracket() {
+    toast("Checking ESPN...");
+    try {
+      const { data, error } = await sb.functions.invoke("load-bracket", { body: { pool_id: id } });
+      if (error) {
+        let msg = error.message;
+        try { msg = (await error.context.json()).error || msg; } catch {}
+        throw new Error(msg);
+      }
+      if (data?.error) throw new Error(data.error);
+      route(); toast("Bracket loaded from ESPN");
+    } catch (e) { toast(e.message, true); }
+  }
+  async function copyInvite() {
+    try { copy(link("#/j/" + must(await sb.rpc("pool_invite_code", { pid: id })))); }
+    catch (e) { toast(e.message, true); }
+  }
+  async function deletePool() {
+    if (!await confirmBox("Delete this pool?", "Everyone's picks are deleted. The squares boards stay.", "Delete pool")) return;
+    try { must(await sb.from("pools").delete().eq("id", id)); go("#/c/" + pool.community_id); }
+    catch (e) { toast(e.message, true); }
+  }
+  async function setPaid(e, box) {
+    try { must(await sb.rpc("set_entry_paid", { eid: e.entry_id, val: box.checked })); toast(box.checked ? `${e.player} marked paid` : `${e.player} marked unpaid`); route(); }
+    catch (err) { box.checked = !box.checked; toast(err.message, true); }
+  }
+
+  const champ = seed => team(seed) ? `#${seed} ${team(seed).name}` : "";
+  const standingsEl = standings.length
+    ? h("div", { class: "tscroll" }, h("table", { class: "stand" },
+        h("thead", {}, h("tr", {}, h("th", {}, ""), h("th", {}, "Player"),
+          st.locked ? [h("th", {}, "Points"), h("th", {}, "Right"), h("th", {}, "Champion"), h("th", {}, "Tiebreak")] : h("th", {}, "Picked"),
+          mg && h("th", {}, "Paid"))),
+        h("tbody", {}, standings.map((e, i) => {
+          const box = mg && h("input", { type: "checkbox", checked: e.paid, "aria-label": `${e.player} paid` });
+          if (box) box.addEventListener("change", () => setPaid(e, box));
+          return h("tr", {},
+            h("td", { class: "n" }, st.locked ? i + 1 : ""),
+            h("td", {}, e.player, !e.paid && h("span", { class: "meta" }, " (unpaid)")),
+            st.locked ? [h("td", { class: "n" }, e.points), h("td", { class: "n" }, e.correct), h("td", {}, champ(e.champion)),
+                         h("td", { class: "n" }, e.tiebreak ?? "")]
+                      : h("td", {}, `${e.picks_done} of 11`),
+            mg && h("td", {}, h("label", { class: "check" }, box)));
+        }))))
+    : h("p", { class: "empty" }, mg ? "No players yet. Send out the invite link." : "No players yet.");
+
+  if (pool.loaded_at) draw();
+  render(
+    mg && h("div", { class: "crumbs" }, h("a", { href: "#/c/" + pool.community_id }, "Community")),
+    h("h1", {}, pool.name),
+    h("p", { class: "sub" }, `College Football Playoff ${seasonLabel("College Football", pool.season)}`),
+    h("div", { class: "pstat " + (st.open ? "open" : "shut") }, st.text),
+    h("div", { class: "actions" },
+      btn("Copy pool link", () => copy(link("#/p/" + id))),
+      mg && btn("Copy invite link", copyInvite, "primary"),
+      mg && !st.locked && btn(pool.loaded_at ? "Reload bracket from ESPN" : "Load bracket from ESPN", loadBracket, pool.loaded_at ? "" : "primary"),
+      mg && btn("Delete pool", deletePool, "danger")),
+    !S.poolsOn && mg && h("p", { class: "meta" }, "Hidden. Only you can see this pool until bracket pools are turned on."),
+    pool.loaded_at
+      ? [
+          !entry && S.me && st.open && h("p", { class: "meta" }, "To make picks, open the pool's invite link."),
+          !S.me && st.open && h("p", { class: "meta" }, "Players: open your invite link to sign in and make picks."),
+          editing && h("p", { class: "meta" }, "Tap the team you think wins each game. Later rounds fill in from your picks."),
+          bracketEl,
+          editing && h("div", { class: "savebar" }, countEl,
+            h("label", {}, "Title game total points", tbInput),
+            btn("Save picks", save, "primary")),
+          h("h2", {}, st.locked ? "Standings" : "Players"),
+          standingsEl,
+          h("p", { class: "meta" }, "Unpaid entries score 0. Ties go to the closest guess of total points in the title game.")
+        ]
+      : [h("p", { class: "empty" }, "The bracket isn't loaded yet. Picks open once it's announced and loaded from ESPN."),
+         h("h2", {}, "Players"), standingsEl]
+  );
+}
 
 /* ---------- Start ---------- */
 (async () => {
