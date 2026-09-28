@@ -839,6 +839,12 @@ function wireTeamLookup(inputs, nameKey, colorKey) {
    Admins can still type scores by hand for any league. */
 const ESPN_LEAGUES = ["NFL", "College Football", "NBA", "WNBA", "Men's College Basketball", "Women's College Basketball", "MLB", "NHL", "MLS"];
 const SLOTS = [["q1", "Q1"], ["q2", "Q2"], ["q3", "Q3"], ["final", "Final"]];
+// Men's college basketball plays two halves: only Half and Final pay. Half is stored in q2,
+// which is where the pull-scores function puts the halftime score.
+const HALF_SLOTS = [["q2", "Half"], ["final", "Final"]];
+const isHalves = league => leagueFor(league)?.name === "Men's College Basketball";
+const slotsFor = league => isHalves(league) ? HALF_SLOTS : SLOTS;
+const slotTag = lbl => lbl === "Final" ? "F" : lbl === "Half" ? "H" : lbl;
 function canPull(ctx) {
   const L = leagueFor(ctx?.league);
   return !!L && ESPN_LEAGUES.includes(L.name) && (L.mode === "date" || L.weeks.includes(ctx.label));
@@ -850,29 +856,29 @@ async function pullScores(b) {
   return data;
 }
 // Winning square for each slot: last digit of each team's score, matched to the drawn numbers
-function winners(b) {
+function winners(b, slots = SLOTS) {
   const sc = b.scores || {}, map = new Map(), by = {};
-  for (const [k, lbl] of SLOTS) {
+  for (const [k, lbl] of slots) {
     const s = sc[k];
     if (!s) continue;
     const c = b.top_nums.indexOf(s.top % 10), r = b.side_nums.indexOf(s.side % 10);
     const idx = c >= 0 && r >= 0 ? r * 10 + c + 1 : null;
     by[k] = { ...s, idx };
-    if (idx) map.set(idx, [...(map.get(idx) || []), lbl === "Final" ? "F" : lbl]);
+    if (idx) map.set(idx, [...(map.get(idx) || []), slotTag(lbl)]);
   }
   return { map, by };
 }
 
 async function editScores(b, ctx, refresh) {
   const sc = b.scores || {}, T = b.top_team || "Top team", S = b.side_team || "Side team";
-  const fields = [];
-  for (const [k, lbl] of SLOTS) fields.push(
+  const fields = [], slots = slotsFor(ctx?.league);
+  for (const [k, lbl] of slots) fields.push(
     { name: k + "_top", label: `${lbl}: ${T}`, type: "number", inputmode: "numeric", min: 0, value: sc[k]?.top ?? "", half: true },
     { name: k + "_side", label: `${lbl}: ${S}`, type: "number", inputmode: "numeric", min: 0, value: sc[k]?.side ?? "", half: true });
   const espnOk = canPull(ctx);
   const v = await modal({ title: "Scores",
     text: espnOk ? "Pull the game from ESPN and it keeps updating on its own. Typing scores in turns ESPN off for this board until you pull again."
-                 : "Type each team's total score at the end of each quarter.",
+                 : `Type each team's total score at the end of each ${isHalves(ctx?.league) ? "half" : "quarter"}.`,
     fields, ok: "Save scores",
     extra: [...(espnOk ? [{ label: "Pull from ESPN", action: "pull", cls: "primary" }] : []),
             ...(Object.keys(sc).length ? [{ label: "Clear", action: "clear", cls: "danger" }] : [])] });
@@ -889,6 +895,7 @@ async function editScores(b, ctx, refresh) {
     if (v.__action === "clear") return refresh(must(await sb.rpc("set_scores", { bid: b.id, sc: {}, ev: null })));
     const out = { state: "manual" };
     for (const [k] of SLOTS) {
+      if (!slots.some(([x]) => x === k)) { out[k] = null; continue; }   // slot not used by this league
       const t = String(v[k + "_top"]).trim(), s = String(v[k + "_side"]).trim();
       out[k] = t !== "" && s !== "" ? { top: Math.max(0, Math.floor(Number(t)) || 0), side: Math.max(0, Math.floor(Number(s)) || 0) } : null;
     }
@@ -971,7 +978,7 @@ function boardBlock(b, mg, ctx) {
     cur.replaceWith(nw);
     requestAnimationFrame(fitBoards);
   };
-  const sheet = renderSheet(b, editable, refresh);
+  const sheet = renderSheet(b, editable, refresh, slotsFor(ctx?.league));
   block.append(
     h("div", { class: "bar" },
       h("span", { class: "status " + (b.locked ? "locked" : "open") }, b.locked ? "Locked" : "Open"),
@@ -982,7 +989,7 @@ function boardBlock(b, mg, ctx) {
       btn("Copy link", () => copy(link("#/b/" + b.id))),
       canEdit && btn("Scores", () => editScores(b, ctx, refresh)),
       !canEdit && canPull(ctx) && b.scores?.state !== "post" && b.scores?.state !== "manual" && !b.scores?.final && btn("Update score", () => viewerPull(b, refresh)),
-      mg && !b.locked && btn("Edit details", () => editDetails(b, refresh)),
+      mg && !b.locked && btn("Edit details", () => editDetails(b, refresh, ctx?.league)),
       editable && btn("Lock board", () => lockBoard(b, refresh)),
       b.locked && S.me?.is_owner && btn("Unlock", () => unlockBoard(b, refresh), "primary"),
       mg && !b.locked && btn("Move board", () => moveBoard(b, ctx)),
@@ -1001,8 +1008,8 @@ function boardBlock(b, mg, ctx) {
   return block;
 }
 
-function renderSheet(b, editable, refresh) {
-  const win = winners(b), sc = b.scores || {};
+function renderSheet(b, editable, refresh, slots = SLOTS) {
+  const win = winners(b, slots), sc = b.scores || {};
   const clickable = fn => editable ? {
     role: "button", tabindex: "0", onclick: fn,
     onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } }
@@ -1049,7 +1056,7 @@ function renderSheet(b, editable, refresh) {
           `${sc.detail}: ${b.top_team} ${sc.top_now}, ${b.side_team} ${sc.side_now}`) : null),
     h("div", { class: "shead" }, h("div", { class: "title" }, `${b.sport ? b.sport + " " : ""}Squares`), h("div", { class: "price" }, `${money(b.price)} per square`)),
     h("div", { class: "smain" }, grid,
-      h("div", { class: "pay" }, SLOTS.map(([k, lbl]) => {
+      h("div", { class: "pay" }, slots.map(([k, lbl]) => {
         const w = win.by[k];
         if (!w) return h("div", {}, h("b", {}, lbl + ":"), h("span", {}, money(b[k])));
         const name = w.idx ? (b.squares[w.idx - 1] || "") : "";
@@ -1070,7 +1077,23 @@ async function editSquare(b, idx, refresh) {
     ok: "Save name", extra: cur ? [{ label: "Clear square", action: "clear", cls: "danger" }] : [] });
   if (!v) return;
   const val = v.__action === "clear" ? "" : v.name.trim();
-  try { refresh(must(await sb.rpc("set_square", { bid: b.id, idx, val }))); }
+  try {
+    const row = must(await sb.rpc("set_square", { bid: b.id, idx, val }));
+    refresh(row);
+    // Last empty square just got a name: offer to lock early so the board can go out now
+    if (val && !row.locked && isFull(row) && !isFull(b)) await offerEarlyLock(row, refresh);
+  } catch (e) { toast(e.message, true); }
+}
+
+const isFull = b => (b.squares || []).filter(x => String(x || "").trim()).length === 100;
+async function offerEarlyLock(b, refresh) {
+  if (!await confirmBox("Board is full. Lock it now?",
+    "Locking now draws the numbers so you can send the board out. If you wait, it still locks itself 15 minutes before kickoff.",
+    "Lock and draw numbers", "primary")) return toast("Board left open");
+  await earlyLock(b, refresh);
+}
+async function earlyLock(b, refresh) {
+  try { refresh(must(await sb.rpc("lock_full_board", { bid: b.id }))); toast("Board locked and numbers drawn"); }
   catch (e) { toast(e.message, true); }
 }
 
@@ -1087,7 +1110,8 @@ async function editNumber(b, axis, idx, refresh) {
   catch (e) { toast(e.message, true); }
 }
 
-function detailFields(b = {}) {
+function detailFields(b = {}, league) {
+  const halves = isHalves(league);
   return [
     { name: "sport", label: "Sport", value: b.sport ?? "Football", list: "sport-list", maxlength: 30, placeholder: "Football, Basketball, or type one" },
     { name: "top_team", label: "Top team", value: b.top_team, half: true, maxlength: 40, list: "team-list", placeholder: "Start typing a team" },
@@ -1096,10 +1120,10 @@ function detailFields(b = {}) {
     { name: "side_color", label: "Side team color", type: "color", value: b.side_color || "#FFE14D", half: true },
     { name: "kickoff", label: "Kickoff line", value: b.kickoff, placeholder: "2:30 kickoff", maxlength: 60 },
     { name: "price", label: "Price per square", type: "number", step: "0.01", min: 0, inputmode: "decimal", value: b.price ?? 6, half: true },
-    { name: "q1", label: "Q1 payout", type: "number", step: "0.01", min: 0, inputmode: "decimal", value: b.q1 ?? 125, half: true },
-    { name: "q2", label: "Q2 payout", type: "number", step: "0.01", min: 0, inputmode: "decimal", value: b.q2 ?? 125, half: true },
-    { name: "q3", label: "Q3 payout", type: "number", step: "0.01", min: 0, inputmode: "decimal", value: b.q3 ?? 125, half: true },
-    { name: "final", label: "Final payout", type: "number", step: "0.01", min: 0, inputmode: "decimal", value: b.final ?? 125, half: true },
+    ...(halves ? [] : [{ name: "q1", label: "Q1 payout", type: "number", step: "0.01", min: 0, inputmode: "decimal", value: b.q1 ?? 125, half: true }]),
+    { name: "q2", label: halves ? "Half payout" : "Q2 payout", type: "number", step: "0.01", min: 0, inputmode: "decimal", value: b.q2 ?? (halves ? 250 : 125), half: true },
+    ...(halves ? [] : [{ name: "q3", label: "Q3 payout", type: "number", step: "0.01", min: 0, inputmode: "decimal", value: b.q3 ?? 125, half: true }]),
+    { name: "final", label: "Final payout", type: "number", step: "0.01", min: 0, inputmode: "decimal", value: b.final ?? (halves ? 250 : 125), half: true },
     { name: "footer", label: "Bottom note", value: b.footer ?? "NO PAY, NO PLAY!", maxlength: 60, half: true }
   ];
 }
@@ -1107,8 +1131,9 @@ function wireTeams(inputs) {
   wireTeamLookup(inputs, "top_team", "top_color");
   wireTeamLookup(inputs, "side_team", "side_color");
 }
-function cleanDetails(v) {
+function cleanDetails(v, league) {
   const num = x => { const n = Number(x); return Number.isFinite(n) && n >= 0 ? n : 0; };
+  if (isHalves(league)) { v.q1 = 0; v.q3 = 0; }   // halves only: no Q1 or Q3 payout
   return { sport: v.sport.trim(), top_team: v.top_team.trim(), top_color: v.top_color, side_team: v.side_team.trim(), side_color: v.side_color,
     kickoff: v.kickoff.trim(), price: num(v.price), q1: num(v.q1), q2: num(v.q2), q3: num(v.q3), final: num(v.final), footer: v.footer.trim() };
 }
@@ -1116,18 +1141,18 @@ function cleanDetails(v) {
 async function addBoard(set, count) {
   teamDatalist(); setList("sport-list", SPORTS);
   const sport = leagueFor(set.weeks?.league)?.sport ?? "";
-  const v = await modal({ title: "Add board", fields: detailFields({ sport }), ok: "Add board", after: wireTeams });
+  const v = await modal({ title: "Add board", fields: detailFields({ sport }, set.weeks?.league), ok: "Add board", after: wireTeams });
   if (!v) return;
-  try { must(await sb.from("boards").insert({ set_id: set.id, sort_order: count, ...cleanDetails(v) })); route(); }
+  try { must(await sb.from("boards").insert({ set_id: set.id, sort_order: count, ...cleanDetails(v, set.weeks?.league) })); route(); }
   catch (e) { toast(e.message, true); }
 }
 
-async function editDetails(b, refresh) {
+async function editDetails(b, refresh, league) {
   teamDatalist(); setList("sport-list", SPORTS);
-  const v = await modal({ title: "Edit details", fields: detailFields(b), ok: "Save details", after: wireTeams });
+  const v = await modal({ title: "Edit details", fields: detailFields(b, league), ok: "Save details", after: wireTeams });
   if (!v) return;
   try {
-    const rows = must(await sb.from("boards").update(cleanDetails(v)).eq("id", b.id).select());
+    const rows = must(await sb.from("boards").update(cleanDetails(v, league)).eq("id", b.id).select());
     if (!rows.length) return toast("Board is locked or you don't have edit rights.", true);
     refresh(rows[0]);
   } catch (e) { toast(e.message, true); }
