@@ -196,6 +196,12 @@ main.wide{max-width:1400px}
 .leader li:first-child .rk{color:#F2B61D}
 .leader .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .leader .pt{font:800 22px/1 var(--display);font-variant-numeric:tabular-nums}
+.shots{display:grid;gap:26px;margin-top:10px}
+.shots figure{margin:0}
+.shots figcaption{font-weight:700;margin:0 0 8px}
+.shots figcaption span{display:block;font-weight:400;font-size:14px;color:var(--chalk-dim)}
+.shots img{display:block;width:100%;height:auto;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+.shots .phone img{max-width:430px}
 .stand{width:100%;border-collapse:collapse;font-size:15px}
 .stand th{text-align:left;font-size:13px;color:var(--chalk-dim);font-weight:600;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.2)}
 .stand td{padding:9px 8px;border-bottom:1px solid rgba(255,255,255,.08)}
@@ -397,6 +403,7 @@ async function route() {
     if (key === "login" || !S.session) return viewLogin();
     if (key === "c" && id) return await viewCommunity(id);
     if (key === "people") return await viewPeople();
+    if (key === "preview") return viewPreview();
     await viewHome();
     if (S.me && (!S.me.first_name || !S.me.last_name) && !S.askedName) { S.askedName = true; editName(true); }
     return;
@@ -484,7 +491,9 @@ async function viewHome() {
     S.me?.is_owner && h("div", { class: "switch" },
       h("div", {}, h("b", {}, `Bracket pools are ${S.poolsOn ? "on" : "off"}. `),
         h("span", { class: "meta" }, S.poolsOn ? "Admins and players can see them." : "Only you can see them.")),
-      btn(S.poolsOn ? "Turn off" : "Turn on for everyone", togglePools, S.poolsOn ? "danger" : "primary")),
+      h("div", { class: "actions", style: "margin:0" },
+        h("a", { class: "btn", href: "#/preview" }, "What's coming"),
+        btn(S.poolsOn ? "Turn off" : "Turn on for everyone", togglePools, S.poolsOn ? "danger" : "primary"))),
     mine.length ? [h("h1", {}, "My pools"),
       h("ul", { class: "list" }, mine.map(p => h("li", {},
         h("div", {}, h("a", { href: "#/p/" + p.pool_id }, p.name),
@@ -1088,6 +1097,7 @@ function boardBlock(b, mg, ctx) {
       mg && !b.locked && ctx?.siblings > 1 && btn("Move down", () => reorderBoard(b, 1, ctx)),
       mg && !b.locked && btn("Delete", () => deleteBoard(b), "danger"),
       owner && btn("Helpers", () => go("#/b/" + b.id)),
+      S.me?.is_owner && btn("Audit log", () => downloadAudit(b)),
       b.locked_at
         ? h("span", { class: "lockstamp" }, `${b.locked_auto ? "Auto Locked" : "Locked"} ${lockTime(b.locked_at)}`)
         : (kickoffOf(b)
@@ -1294,6 +1304,21 @@ async function helpersPanel(b) {
   return wrap;
 }
 
+// Board Master only: every change on this board as a spreadsheet (kept until a week after the game)
+async function downloadAudit(b) {
+  try {
+    const rows = must(await sb.from("board_audit").select("at,actor_name,action,detail,board_label").eq("board_id", b.id).order("at").order("id"));
+    if (!rows.length) return toast("No changes logged for this board.");
+    const cell = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = [["Time (Central)", "Who", "What", "Details", "Board"],
+      ...rows.map(r => [lockTime(r.at), r.actor_name, r.action, r.detail, r.board_label])].map(r => r.map(cell).join(",")).join("\r\n");
+    const a = h("a", { href: URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv" })),
+      download: `audit-${(boardName(b)).replace(/[^a-z0-9]+/gi, "-")}-${new Date().toISOString().slice(0, 10)}.csv` });
+    document.body.append(a); a.click(); a.remove();
+    toast(`Audit log downloaded (${rows.length} changes)`);
+  } catch (e) { toast(e.message, true); }
+}
+
 async function lockBoard(b, refresh) {
   if (!await confirmBox("Lock this board?", "No one can change it after this. Only the super admin can unlock it.", "Lock board", "primary")) return;
   try {
@@ -1436,6 +1461,28 @@ function bracketLines(br) {
 }
 addEventListener("resize", () => document.querySelectorAll(".bracket").forEach(bracketLines));
 document.fonts?.ready.then(() => document.querySelectorAll(".bracket").forEach(bracketLines));
+
+// Board Master only: pictures of the pools to show people before they're turned on.
+// The images live in the app's preview folder on GitHub.
+const PREVIEWS = [
+  ["1-playoff-bracket-make-picks.png", "Playoff bracket: making picks", "Players tap the winner of each game. Later rounds fill in from their picks."],
+  ["2-playoff-bracket-results-leaderboard.png", "Playoff bracket: results and leaderboard", "Right picks in green, wrong ones struck out. Top 10 on the right."],
+  ["3-playoff-bracket-phone.png", "Playoff bracket on a phone", "", true],
+  ["4-bowl-pickem.png", "Bowl pick'em", "Every non-playoff bowl. 1 point per right pick. Each game locks at its own kickoff."],
+  ["5-bowl-pickem-phone.png", "Bowl pick'em on a phone", "", true]
+];
+function viewPreview() {
+  if (!S.me?.is_owner) throw new Error("Page not found.");
+  render(
+    h("div", { class: "crumbs" }, h("a", { href: "#/" }, "Home")),
+    h("h1", {}, "Coming soon: bracket pools"),
+    h("p", { class: "sub" }, "Sample players and last season's real games. Tap a picture to open it full size."),
+    h("div", { class: "shots" }, PREVIEWS.map(([file, title, note, phone]) => h("figure", { class: phone ? "phone" : "" },
+      h("figcaption", {}, title, note && h("span", {}, note)),
+      h("a", { href: "preview/" + file, target: "_blank", rel: "noopener" },
+        h("img", { src: "preview/" + file, alt: title, loading: "lazy" })))))
+  );
+}
 
 async function togglePools() {
   const on = !S.poolsOn;
