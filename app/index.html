@@ -164,10 +164,38 @@ button.pick:hover{background:rgba(255,255,255,.12)}
 .mine{font-size:14px;margin-top:6px;color:var(--chalk-dim)}
 .mine .right{color:#B9E6BC;font-weight:700}.mine .wrong{color:#FFC9C4;font-weight:700;text-decoration:line-through}
 .game .blink{display:inline-block;margin-top:6px;font-size:14px;font-weight:600}
+.game .btn{min-height:34px;padding:5px 12px;margin-top:6px;font-size:13px}
+.game .gh b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.game .gh span{white-space:nowrap}
 .savebar{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:16px;padding:10px 12px;border-radius:12px;background:rgba(43,33,27,.92);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18), 0 6px 18px rgba(0,0,0,.4)}
 .savebar input{width:90px;min-height:42px;padding:8px;border-radius:8px;border:0;font-size:16px}
 .savebar label{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 .savebar .btn{margin-left:auto}
+/* Standard bracket: rounds left to right, lines join each game to the next */
+main.wide{max-width:1400px}
+.playout{display:grid;gap:20px;align-items:start}
+@media (min-width:1000px){.playout{grid-template-columns:minmax(0,1fr) 270px}}
+.bscroll{overflow-x:auto;padding-bottom:8px}
+.bracket{position:relative;display:grid;grid-template-columns:repeat(4,214px);column-gap:44px;row-gap:10px;grid-template-rows:auto repeat(8,minmax(64px,auto));width:max-content}
+.bracket .rh{grid-row:1;font-size:13px;font-weight:700;color:var(--chalk-dim);padding-bottom:6px}
+.bracket .game{align-self:center;position:relative;z-index:1;padding:8px}
+.bracket .pick{min-height:40px;margin:3px 0;padding:4px 8px;font-size:14px}
+.bracket .pick .sd{font-size:16px;min-width:18px}
+.bracket .game .gh{font-size:12px;margin-bottom:4px;white-space:nowrap}
+.bracket .mine{font-size:13px;margin-top:4px}
+.bracket .blink{font-size:13px;margin-top:4px}
+.blines{position:absolute;left:0;top:0;pointer-events:none;z-index:0}
+.leader{padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.18), inset 0 0 0 1px rgba(255,255,255,.1)}
+@media (min-width:1000px){.leader{position:sticky;top:12px}}
+@media (max-width:999px){.leader{order:-1}}   /* phones: leaderboard above the games */
+.leader h2{margin:0 0 8px}
+.leader ol{list-style:none;margin:0;padding:0}
+.leader li{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+.leader li:last-child{border-bottom:0}
+.leader .rk{font:800 20px/1 var(--display);min-width:24px;color:var(--chalk-dim)}
+.leader li:first-child .rk{color:#F2B61D}
+.leader .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.leader .pt{font:800 22px/1 var(--display);font-variant-numeric:tabular-nums}
 .stand{width:100%;border-collapse:collapse;font-size:15px}
 .stand th{text-align:left;font-size:13px;color:var(--chalk-dim);font-weight:600;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.2)}
 .stand td{padding:9px 8px;border-bottom:1px solid rgba(255,255,255,.08)}
@@ -460,7 +488,7 @@ async function viewHome() {
     mine.length ? [h("h1", {}, "My pools"),
       h("ul", { class: "list" }, mine.map(p => h("li", {},
         h("div", {}, h("a", { href: "#/p/" + p.pool_id }, p.name),
-          h("div", { class: "meta" }, `College Football Playoff ${seasonLabel("College Football", p.season)}: ${p.picks_done} of 11 picked`)))))] : null,
+          h("div", { class: "meta" }, `${poolKindLabel(p)} ${seasonLabel("College Football", p.season)}: ${p.picks_done} of ${p.games} picked`)))))] : null,
     isPlayerOnly ? null : h("h1", {}, "Communities"),
     isSuper() && h("div", { class: "actions" }, btn("New community", newCommunity, "primary"),
       h("a", { class: "btn", href: "#/people" }, "People")),
@@ -625,15 +653,15 @@ async function viewCommunity(id) {
   ];
 
   if (poolsShown()) {
-    const pools = must(await sb.from("pools").select("id,name,season,loaded_at,picks_lock_at").eq("community_id", id).order("season", { ascending: false }).order("created_at"));
+    const pools = must(await sb.from("pools").select("id,name,season,kind,loaded_at,picks_lock_at").eq("community_id", id).order("season", { ascending: false }).order("created_at"));
     nodes.push(
       h("h2", {}, "Bracket pools"),
       !S.poolsOn && h("p", { class: "meta" }, "Hidden. Only you can see pools until you turn them on from the home screen."),
-      h("div", { class: "actions" }, btn("New CFP pool", () => newPool(id), "primary")),
+      h("div", { class: "actions" }, btn("New pool", () => newPool(id), "primary")),
       pools.length
         ? h("ul", { class: "list" }, pools.map(p => h("li", {},
             h("div", {}, h("a", { href: "#/p/" + p.id }, p.name),
-              h("div", { class: "meta" }, `College Football Playoff ${seasonLabel("College Football", p.season)}: ${poolState(p).text}`)))))
+              h("div", { class: "meta" }, `${poolKindLabel(p)} ${seasonLabel("College Football", p.season)}: ${p.kind === "bowl" ? (p.loaded_at ? "Games lock one at a time" : "Waiting for the bowl schedule") : poolState(p).text}`)))))
         : h("p", { class: "empty" }, "No pools yet."));
   }
 
@@ -1384,6 +1412,31 @@ function nextHash() { try { return S.next || sessionStorage.getItem(NEXT_KEY) ||
 function setNext(hash) { S.next = hash; try { hash ? sessionStorage.setItem(NEXT_KEY, hash) : sessionStorage.removeItem(NEXT_KEY); } catch {} }
 function afterLogin() { const n = nextHash(); setNext(""); return n || "#/"; }
 
+// Lines from each game to the game its winner plays next
+const FEEDS = { 1: 5, 2: 6, 3: 7, 4: 8, 5: 9, 6: 9, 7: 10, 8: 10, 9: 11, 10: 11 };
+function bracketLines(br) {
+  if (!br?.isConnected) return;
+  br.querySelector(".blines")?.remove();
+  const box = br.getBoundingClientRect(), pos = {};
+  br.querySelectorAll(".game[data-slot]").forEach(el => {
+    const r = el.getBoundingClientRect();
+    pos[el.dataset.slot] = { l: r.left - box.left, r: r.right - box.left, m: r.top - box.top + r.height / 2 };
+  });
+  const paths = Object.entries(FEEDS).map(([from, to]) => {
+    const a = pos[from], b = pos[to];
+    if (!a || !b) return "";
+    const x = (a.r + b.l) / 2;
+    return `M${a.r} ${a.m}H${x}V${b.m}H${b.l}`;
+  }).join("");
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "blines");
+  svg.setAttribute("width", br.scrollWidth); svg.setAttribute("height", br.scrollHeight);
+  svg.innerHTML = `<path d="${paths}" fill="none" stroke="rgba(242,238,233,.4)" stroke-width="2"/>`;
+  br.prepend(svg);
+}
+addEventListener("resize", () => document.querySelectorAll(".bracket").forEach(bracketLines));
+document.fonts?.ready.then(() => document.querySelectorAll(".bracket").forEach(bracketLines));
+
 async function togglePools() {
   const on = !S.poolsOn;
   if (!await confirmBox(on ? "Turn on bracket pools?" : "Turn off bracket pools?",
@@ -1405,17 +1458,47 @@ function poolState(p) {
 
 async function newPool(cid) {
   const season = currentSeason();
-  const v = await modal({ title: "New CFP pool", text: "After the bracket is announced, open the pool and tap Load bracket from ESPN.",
+  const names = { cfp: `CFP Bracket Pool ${seasonLabel("College Football", season)}`, bowl: `Bowl Pick'em ${seasonLabel("College Football", season)}` };
+  const v = await modal({ title: "New pool", text: "After the matchups are announced, open the pool and load the games from ESPN.",
     fields: [
-      { name: "name", label: "Pool name", value: `CFP Bracket Pool ${seasonLabel("College Football", season)}`, required: true, maxlength: 60 },
+      { name: "kind", label: "Type", value: "cfp", options: [{ value: "cfp", label: "College Football Playoff bracket" }, { value: "bowl", label: "Bowl pick'em (non-playoff bowls)" }] },
+      { name: "name", label: "Pool name", value: names.cfp, required: true, maxlength: 60 },
       { name: "season", label: "Season", type: "number", value: season, min: 2024, max: 2100, required: true, inputmode: "numeric" }
-    ], ok: "Create pool" });
+    ], ok: "Create pool",
+    after: inputs => inputs.kind.addEventListener("change", () => {
+      if (Object.values(names).includes(inputs.name.value)) inputs.name.value = names[inputs.kind.value];
+    }) });
   if (!v || !v.name.trim()) return;
   try {
-    const row = must(await sb.from("pools").insert({ community_id: cid, name: v.name.trim(), season: Number(v.season) }).select("id").single());
+    const row = must(await sb.from("pools").insert({ community_id: cid, kind: v.kind, name: v.name.trim(), season: Number(v.season) }).select("id").single());
     go("#/p/" + row.id);
   } catch (e) { toast(e.message, true); }
 }
+
+// Shared pool admin actions
+async function loadPoolGames(pool) {
+  toast("Checking ESPN...");
+  try {
+    const { data, error } = await sb.functions.invoke("load-bracket", { body: { pool_id: pool.id } });
+    if (error) {
+      let msg = error.message;
+      try { msg = (await error.context.json()).error || msg; } catch {}
+      throw new Error(msg);
+    }
+    if (data?.error) throw new Error(data.error);
+    route(); toast(pool.kind === "bowl" ? `${data?.games || "All"} bowls loaded from ESPN` : "Bracket loaded from ESPN");
+  } catch (e) { toast(e.message, true); }
+}
+async function copyPoolInvite(pid) {
+  try { copy(link("#/j/" + must(await sb.rpc("pool_invite_code", { pid })))); }
+  catch (e) { toast(e.message, true); }
+}
+async function deletePoolNow(pool) {
+  if (!await confirmBox("Delete this pool?", "Everyone's picks are deleted. The squares boards stay.", "Delete pool")) return;
+  try { must(await sb.from("pools").delete().eq("id", pool.id)); go("#/c/" + pool.community_id); }
+  catch (e) { toast(e.message, true); }
+}
+const poolKindLabel = p => p.kind === "bowl" ? "Bowl pick'em" : "College Football Playoff";
 
 async function joinFromLink(code) {
   if (!S.session) { setNext("#/j/" + code); return viewLogin(); }
@@ -1426,8 +1509,9 @@ async function joinFromLink(code) {
 }
 
 async function viewPool(id) {
-  const pool = must(await sb.from("pools").select("id,community_id,name,season,teams,picks_lock_at,loaded_at").eq("id", id).maybeSingle());
+  const pool = must(await sb.from("pools").select("id,community_id,name,season,kind,teams,picks_lock_at,loaded_at").eq("id", id).maybeSingle());
   if (!pool) throw new Error("Pool not found. Check the link.");
+  if (pool.kind === "bowl") return viewBowlPool(pool);
   const games = must(await sb.from("pool_games").select("*").eq("pool_id", id).order("slot"));
   const standings = must(await sb.rpc("pool_standings", { pid: id })) || [];
   const entry = S.me ? must(await sb.from("pool_entries").select("*").eq("pool_id", id).eq("user_id", S.me.id).maybeSingle()) : null;
@@ -1453,7 +1537,7 @@ async function viewPool(id) {
     }
   };
 
-  const bracketEl = h("div", { class: "rounds" });
+  const bracketEl = h("div", { class: "bracket" });
   const countEl = h("span", { class: "meta" });
   function teamRow(seed, fromSlot, opts = {}) {
     const t = team(seed);
@@ -1485,11 +1569,22 @@ async function viewPool(id) {
         mt ? h("span", { class: g.winner_seed == null ? "" : g.winner_seed === mine ? "right" : "wrong" }, `#${mine} ${mt.name}`) : "none"),
       g.board_id && h("a", { class: "blink", href: "#/b/" + g.board_id }, "Squares board"));
   }
+  // Grid rows: first round and quarterfinals line up one to one, semis cover two games each, the final covers all
+  const ROWS = { 1: [2, 2], 2: [4, 2], 3: [6, 2], 4: [8, 2], 5: [2, 2], 6: [4, 2], 7: [6, 2], 8: [8, 2], 9: [2, 4], 10: [6, 4], 11: [2, 8] };
   function draw() {
-    bracketEl.replaceChildren(...[1, 2, 3, 4].map(r => h("section", {},
-      h("h2", {}, `${ROUND_NAMES[r - 1]} (${10 * 2 ** (r - 1)} points${r < 4 ? " each" : ""})`),
-      h("div", { class: "games" }, games.filter(g => g.round === r).map(gameCard)))));
+    bracketEl.replaceChildren(
+      ...[1, 2, 3, 4].map(r => h("div", { class: "rh", style: `grid-column:${r}` },
+        `${ROUND_NAMES[r - 1]}: ${10 * 2 ** (r - 1)} pts`)),
+      ...games.map(g => {
+        const card = gameCard(g);
+        const [row, span] = ROWS[g.slot];
+        card.style.gridColumn = String(g.round);
+        card.style.gridRow = `${row} / span ${span}`;
+        card.dataset.slot = g.slot;
+        return card;
+      }));
     countEl.textContent = `${Object.keys(picks).length} of 11 picked`;
+    requestAnimationFrame(() => bracketLines(bracketEl));
   }
 
   async function save() {
@@ -1502,49 +1597,31 @@ async function viewPool(id) {
   }
   const tbInput = h("input", { type: "number", inputmode: "numeric", min: 0, max: 200, value: tb, "aria-label": "Tiebreaker: total points in the title game" });
 
-  async function loadBracket() {
-    toast("Checking ESPN...");
-    try {
-      const { data, error } = await sb.functions.invoke("load-bracket", { body: { pool_id: id } });
-      if (error) {
-        let msg = error.message;
-        try { msg = (await error.context.json()).error || msg; } catch {}
-        throw new Error(msg);
-      }
-      if (data?.error) throw new Error(data.error);
-      route(); toast("Bracket loaded from ESPN");
-    } catch (e) { toast(e.message, true); }
-  }
-  async function copyInvite() {
-    try { copy(link("#/j/" + must(await sb.rpc("pool_invite_code", { pid: id })))); }
-    catch (e) { toast(e.message, true); }
-  }
-  async function deletePool() {
-    if (!await confirmBox("Delete this pool?", "Everyone's picks are deleted. The squares boards stay.", "Delete pool")) return;
-    try { must(await sb.from("pools").delete().eq("id", id)); go("#/c/" + pool.community_id); }
-    catch (e) { toast(e.message, true); }
-  }
-  async function setPaid(e, box) {
-    try { must(await sb.rpc("set_entry_paid", { eid: e.entry_id, val: box.checked })); toast(box.checked ? `${e.player} marked paid` : `${e.player} marked unpaid`); route(); }
-    catch (err) { box.checked = !box.checked; toast(err.message, true); }
-  }
+  const loadBracket = () => loadPoolGames(pool), copyInvite = () => copyPoolInvite(id), deletePool = () => deletePoolNow(pool);
 
+  // Top 10: ties share a rank until the title game's tiebreaker settles them
+  const leaderEl = h("aside", { class: "leader" }, h("h2", {}, "Leaderboard"),
+    !st.locked
+      ? h("p", { class: "meta" }, "Scores start when picks lock.")
+      : standings.length
+        ? h("ol", {}, standings.slice(0, 10).map((e, i) => {
+            const rank = 1 + standings.filter(o => o.points > e.points ||
+              (o.points === e.points && e.tb_diff != null && o.tb_diff != null && o.tb_diff < e.tb_diff)).length;
+            return h("li", {}, h("span", { class: "rk" }, rank), h("span", { class: "nm" }, e.player), h("span", { class: "pt" }, e.points));
+          }))
+        : h("p", { class: "meta" }, "No players yet."));
   const champ = seed => team(seed) ? `#${seed} ${team(seed).name}` : "";
   const standingsEl = standings.length
     ? h("div", { class: "tscroll" }, h("table", { class: "stand" },
         h("thead", {}, h("tr", {}, h("th", {}, ""), h("th", {}, "Player"),
-          st.locked ? [h("th", {}, "Points"), h("th", {}, "Right"), h("th", {}, "Champion"), h("th", {}, "Tiebreak")] : h("th", {}, "Picked"),
-          mg && h("th", {}, "Paid"))),
+          st.locked ? [h("th", {}, "Points"), h("th", {}, "Right"), h("th", {}, "Champion"), h("th", {}, "Tiebreak")] : h("th", {}, "Picked"))),
         h("tbody", {}, standings.map((e, i) => {
-          const box = mg && h("input", { type: "checkbox", checked: e.paid, "aria-label": `${e.player} paid` });
-          if (box) box.addEventListener("change", () => setPaid(e, box));
           return h("tr", {},
             h("td", { class: "n" }, st.locked ? i + 1 : ""),
-            h("td", {}, e.player, !e.paid && h("span", { class: "meta" }, " (unpaid)")),
+            h("td", {}, e.player),
             st.locked ? [h("td", { class: "n" }, e.points), h("td", { class: "n" }, e.correct), h("td", {}, champ(e.champion)),
                          h("td", { class: "n" }, e.tiebreak ?? "")]
-                      : h("td", {}, `${e.picks_done} of 11`),
-            mg && h("td", {}, h("label", { class: "check" }, box)));
+                      : h("td", {}, `${e.picks_done} of 11`));
         }))))
     : h("p", { class: "empty" }, mg ? "No players yet. Send out the invite link." : "No players yet.");
 
@@ -1565,17 +1642,139 @@ async function viewPool(id) {
           !entry && S.me && st.open && h("p", { class: "meta" }, "To make picks, open the pool's invite link."),
           !S.me && st.open && h("p", { class: "meta" }, "Players: open your invite link to sign in and make picks."),
           editing && h("p", { class: "meta" }, "Tap the team you think wins each game. Later rounds fill in from your picks."),
-          bracketEl,
+          h("div", { class: "playout" }, h("div", { class: "bscroll" }, bracketEl), leaderEl),
           editing && h("div", { class: "savebar" }, countEl,
             h("label", {}, "Title game total points", tbInput),
             btn("Save picks", save, "primary")),
           h("h2", {}, st.locked ? "Standings" : "Players"),
           standingsEl,
-          h("p", { class: "meta" }, "Unpaid entries score 0. Ties go to the closest guess of total points in the title game.")
+          h("p", { class: "meta" }, "Ties go to the closest guess of total points in the title game.")
         ]
       : [h("p", { class: "empty" }, "The bracket isn't loaded yet. Picks open once it's announced and loaded from ESPN."),
          h("h2", {}, "Players"), standingsEl]
   );
+  document.querySelector("main")?.classList.add("wide");
+  requestAnimationFrame(() => bracketLines(bracketEl));
+}
+
+/* ---------- Bowl pick'em ----------
+   Every non-playoff bowl from ESPN. Pick the winner of each; 1 point per right pick.
+   Each game locks 15 minutes before its own kickoff. Tiebreaker: total points in the last bowl. */
+const gameLocked = g => !!g.game_date && Date.parse(g.game_date) - 15 * 60000 <= Date.now();
+async function viewBowlPool(pool) {
+  const id = pool.id;
+  // Ask ESPN for any new finals (checked at most once a minute), then read
+  const check = sb.functions.invoke("pool-results", { body: { pool_id: id } }).catch(() => null);
+  if (pool.loaded_at) await Promise.race([check, new Promise(r => setTimeout(r, 4000))]);
+  const games = must(await sb.from("pool_games").select("*").eq("pool_id", id).order("slot"));
+  const standings = must(await sb.rpc("pool_standings", { pid: id })) || [];
+  const entry = S.me ? must(await sb.from("pool_entries").select("*").eq("pool_id", id).eq("user_id", S.me.id).maybeSingle()) : null;
+  const mg = canManage(pool.community_id);
+  const picks = { ...(entry?.picks || {}) };
+  const N = games.length;
+  const lastGame = games.reduce((a, g) => !a || Date.parse(g.game_date) > Date.parse(a.game_date) ? g : a, null);
+  const started = games.some(gameLocked), allLocked = N > 0 && games.every(gameLocked);
+  const tbLocked = !!lastGame && gameLocked(lastGame);
+  const canPick = !!entry && !allLocked;
+  const colorOf = (name, c) => c || findTeam(name)?.[2] || "#888";
+  const countEl = h("span", { class: "meta" });
+  const gamesEl = h("div", { class: "games" });
+
+  function row(g, side) {
+    const name = side === 1 ? g.top_team : g.bottom_team, color = side === 1 ? g.top_color : g.bottom_color;
+    const score = side === 1 ? g.top_score : g.bottom_score;
+    if (!name) return h("div", { class: "pick tbd" }, h("span", { class: "bar", style: "background:transparent" }), "To be decided");
+    const on = picks[g.slot] === side, won = g.winner_seed === side;
+    const kids = [h("span", { class: "bar", style: "background:" + colorOf(name, color) }), name,
+      score != null ? h("span", { class: "ck" }, (won ? "✓ " : "") + score) : null];
+    if (canPick && !gameLocked(g)) return h("button", { type: "button", class: "pick" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false",
+      onclick: () => { picks[g.slot] = side; draw(); } }, kids);
+    return h("div", { class: "pick" + (won ? " won" : "") }, kids);
+  }
+  function card(g) {
+    const locked = gameLocked(g), mine = picks[g.slot];
+    const mineName = mine === 1 ? g.top_team : mine === 2 ? g.bottom_team : null;
+    return h("div", { class: "game" },
+      h("div", { class: "gh" }, h("b", {}, g.name || `Game ${g.slot}`), h("span", {}, g.game_date ? lockTime(g.game_date) : "")),
+      row(g, 1), row(g, 2),
+      entry && locked && h("div", { class: "mine" }, "Your pick: ",
+        mineName ? h("span", { class: g.winner_seed == null ? "" : g.winner_seed === mine ? "right" : "wrong" }, mineName) : "none"),
+      entry && !locked && canPick && h("div", { class: "mine" }, `Locks ${lockTime(Date.parse(g.game_date) - 15 * 60000)}`),
+      g.board_id ? h("a", { class: "blink", href: "#/b/" + g.board_id }, "Squares board")
+        : mg && g.top_team && g.bottom_team && !g.winner_seed && btn("Add squares board", () => addBoard(g)));
+  }
+  function draw() {
+    gamesEl.replaceChildren(...games.map(card));
+    countEl.textContent = `${Object.keys(picks).length} of ${N} picked`;
+  }
+  async function addBoard(g) {
+    try { const bid = must(await sb.rpc("pool_make_board", { pid: id, s: g.slot })); toast("Squares board added"); go("#/b/" + bid); }
+    catch (e) { toast(e.message, true); }
+  }
+  const tbInput = h("input", { type: "number", inputmode: "numeric", min: 0, max: 200, value: entry?.tiebreak ?? "", disabled: tbLocked,
+    "aria-label": "Tiebreaker: total points in the last bowl" });
+  async function save() {
+    const n = tbInput.value.trim() === "" ? null : Number(tbInput.value);
+    if (n != null && !(Number.isInteger(n) && n >= 0 && n <= 200)) return toast("Tiebreaker must be a whole number, 0 to 200.", true);
+    try {
+      const r = must(await sb.rpc("save_picks", { pid: id, picks, tb: n }));
+      Object.keys(picks).forEach(k => delete picks[k]); Object.assign(picks, r.picks || {}); draw();
+      const left = N - Object.keys(picks).length;
+      toast(left ? `Saved. ${left} games still to pick.` : "Picks saved");
+    } catch (e) { toast(e.message, true); }
+  }
+
+  const leaderEl = h("aside", { class: "leader" }, h("h2", {}, "Leaderboard"),
+    !started ? h("p", { class: "meta" }, "Scores start when the first bowl kicks off.")
+      : standings.length
+        ? h("ol", {}, standings.slice(0, 10).map(e => {
+            const rank = 1 + standings.filter(o => o.points > e.points ||
+              (o.points === e.points && e.tb_diff != null && o.tb_diff != null && o.tb_diff < e.tb_diff)).length;
+            return h("li", {}, h("span", { class: "rk" }, rank), h("span", { class: "nm" }, e.player), h("span", { class: "pt" }, e.points));
+          }))
+        : h("p", { class: "meta" }, "No players yet."));
+  const standingsEl = standings.length
+    ? h("div", { class: "tscroll" }, h("table", { class: "stand" },
+        h("thead", {}, h("tr", {}, h("th", {}, ""), h("th", {}, "Player"),
+          started ? [h("th", {}, "Points"), h("th", {}, "Picked"), h("th", {}, "Tiebreak")] : h("th", {}, "Picked"))),
+        h("tbody", {}, standings.map((e, i) => h("tr", {},
+          h("td", { class: "n" }, started ? i + 1 : ""), h("td", {}, e.player),
+          started ? [h("td", { class: "n" }, e.points), h("td", {}, `${e.picks_done} of ${N}`), h("td", { class: "n" }, e.tiebreak ?? "")]
+                  : h("td", {}, `${e.picks_done} of ${N}`))))))
+    : h("p", { class: "empty" }, mg ? "No players yet. Send out the invite link." : "No players yet.");
+
+  const status = !pool.loaded_at ? ["shut", "Waiting for the bowl schedule"]
+    : allLocked ? ["shut", "All games locked"]
+    : ["open", "Picks open. Each game locks 15 minutes before its kickoff."];
+  if (pool.loaded_at) draw();
+  render(
+    mg && h("div", { class: "crumbs" }, h("a", { href: "#/c/" + pool.community_id }, "Community")),
+    h("h1", {}, pool.name),
+    h("p", { class: "sub" }, `Bowl pick'em ${seasonLabel("College Football", pool.season)}: 1 point per right pick`),
+    h("div", { class: "pstat " + status[0] }, status[1]),
+    h("div", { class: "actions" },
+      btn("Copy pool link", () => copy(link("#/p/" + id))),
+      mg && btn("Copy invite link", () => copyPoolInvite(id), "primary"),
+      mg && !started && btn(pool.loaded_at ? "Reload bowls from ESPN" : "Load bowls from ESPN", () => loadPoolGames(pool), pool.loaded_at ? "" : "primary"),
+      mg && btn("Delete pool", () => deletePoolNow(pool), "danger")),
+    !S.poolsOn && mg && h("p", { class: "meta" }, "Hidden. Only you can see this pool until bracket pools are turned on."),
+    pool.loaded_at
+      ? [
+          !entry && S.me && !allLocked && h("p", { class: "meta" }, "To make picks, open the pool's invite link."),
+          !S.me && !allLocked && h("p", { class: "meta" }, "Players: open your invite link to sign in and make picks."),
+          canPick && h("p", { class: "meta" }, "Tap the team you think wins each bowl. You can come back and pick later bowls until each one locks."),
+          h("div", { class: "playout" }, gamesEl, leaderEl),
+          canPick && h("div", { class: "savebar" }, countEl,
+            h("label", {}, tbLocked ? "Tiebreaker (locked)" : "Last bowl total points", tbInput),
+            btn("Save picks", save, "primary")),
+          h("h2", {}, started ? "Standings" : "Players"),
+          standingsEl,
+          h("p", { class: "meta" }, lastGame ? `Ties go to the closest guess of total points in the last bowl (${lastGame.name}).` : "")
+        ]
+      : [h("p", { class: "empty" }, "The bowls aren't loaded yet. Picks open once the bowl schedule is announced and loaded from ESPN."),
+         h("h2", {}, "Players"), standingsEl]
+  );
+  document.querySelector("main")?.classList.add("wide");
 }
 
 /* ---------- Start ---------- */
