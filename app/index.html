@@ -193,6 +193,17 @@ h2{font:700 20px/1.2 var(--ui);margin:28px 0 10px}
 .upnext .fill i{display:block;height:5px;background:#F2B61D}
 .upnext .more{font-size:14px;font-weight:600;color:#F2EEE9}
 .seclbl{font-size:13px;font-weight:600;color:var(--chalk-dim);margin:0 0 10px}
+.dayset{margin:0 0 22px}
+.dayhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px}
+.dayhead h2{margin:0;font:800 24px/1.1 var(--display)}
+.dayhead h2 a{color:var(--chalk);text-decoration:none}
+.dayhead .actions{margin:0;flex-wrap:nowrap}
+.btiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.btile{padding:12px;border-radius:12px;background:var(--card);box-shadow:var(--card-edge);color:var(--chalk);text-decoration:none;display:flex;flex-direction:column;gap:6px;min-width:0}
+.btile b{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btile span{font-size:12px;color:var(--muted)}
+.btile .fill{height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.btile .fill i{display:block;height:5px;background:#F2B61D}
 .wcards{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin-bottom:20px}
 .wcard{min-width:0;display:flex;gap:10px;align-items:center;padding:12px;border-radius:18px;background:var(--card);box-shadow:var(--card-edge)}
 .wcard>a{flex-grow:1;display:flex;gap:14px;align-items:center;min-width:0;color:var(--chalk);text-decoration:none}
@@ -815,7 +826,7 @@ async function handleRecovery() {
 const range = (n, f) => Array.from({ length: n }, (_, i) => f(i + 1));
 const LEAGUES = {
   "NFL": { sport: "Football", mode: "week", weeks: ["Hall of Fame Weekend", ...range(3, i => `Preseason Week ${i}`), ...range(18, i => `Week ${i}`),
-    "Wild Card", "Divisional Round", "Conference Championships", "Pro Bowl", "Super Bowl"] },
+    "Wild Card", "Divisional Round", "Conference Championships", "Super Bowl"] },
   "College Football": { sport: "Football", mode: "week", weeks: [...range(16, i => `Week ${i}`), "Bowls"] },
   "NBA": { sport: "Basketball", mode: "date", crossYear: true },
   "WNBA": { sport: "Basketball", mode: "date" },
@@ -840,6 +851,67 @@ function dateParts(iso) {
   return { y, m, key: y * 10000 + m * 100 + d,
     label: dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }) };
 }
+/* ---------- Week dates ----------
+   Football weeks get their dates from ESPN's calendar (through the pull-scores function).
+   Date-based leagues (NBA, MLB, ...) are a single game date. Typed-in leagues have no dates,
+   so nothing is checked for them. If ESPN can't be reached, nothing is blocked. */
+const _weekRanges = new Map();
+const isoOf = k => `${String(k).slice(0, 4)}-${String(k).slice(4, 6)}-${String(k).slice(6)}`;
+async function weekRange(w) {
+  if (!w) return null;
+  if (/^\d{8}$/.test(String(w.sort_key || ""))) { const d = isoOf(w.sort_key); return { start: d, end: d }; }
+  const L = leagueFor(w.league);
+  if (!L || L.mode !== "week" || !L.weeks.includes(w.label)) return null;
+  const key = `${L.name}|${w.season}|${w.label}`;
+  if (!_weekRanges.has(key)) _weekRanges.set(key, (async () => {
+    try {
+      const { data, error } = await sb.functions.invoke("pull-scores", { body: { week_dates: { league: L.name, season: w.season, label: w.label } } });
+      if (!error && data?.none) return { none: true };
+      return !error && data?.start && data?.end ? { start: data.start, end: data.end } : null;
+    } catch { return null; }
+  })().then(r => { if (!r) _weekRanges.delete(key); return r; }));
+  const r = await _weekRanges.get(key);
+  return r?.none ? null : r;
+}
+// True only when ESPN answered and has no such week that season (e.g. a Week 16 that doesn't exist)
+async function weekMissing(w) {
+  const L = leagueFor(w.league);
+  if (!L || L.mode !== "week" || !L.weeks.includes(w.label)) return false;
+  await weekRange(w);
+  return !!(await _weekRanges.get(`${L.name}|${w.season}|${w.label}`))?.none;
+}
+const shortDate = iso => { const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }); };
+// "Oct 5–11", "Sep 28–Oct 4", or "Oct 10" for a single day
+function rangeText(r) {
+  if (!r) return "";
+  if (r.start === r.end) return shortDate(r.start);
+  const a = shortDate(r.start), b = shortDate(r.end);
+  return a.split(" ")[0] === b.split(" ")[0] ? `${a}–${b.split(" ")[1]}` : `${a}–${b}`;
+}
+const addDays = (iso, n) => { const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); };
+// Which preset week a date falls in, checked against ESPN. Returns the label or "".
+async function weekForDate(w, iso) {
+  const L = leagueFor(w.league), r = await weekRange(w);
+  if (!L || L.mode !== "week" || !r) return "";
+  const i = L.weeks.indexOf(w.label) + Math.floor((Date.parse(iso) - Date.parse(r.start)) / 864e5 / 7);
+  const guess = L.weeks[i];
+  if (!guess) return "";
+  const g = await weekRange({ league: L.name, season: w.season, label: guess });
+  return g && iso >= g.start && iso <= g.end ? guess : "";
+}
+// null when the date fits the week; otherwise the message to show
+async function dateProblem(w, iso) {
+  const r = await weekRange(w);
+  if (!r || (iso >= r.start && iso <= r.end)) return null;
+  const right = await weekForDate(w, iso);
+  return `${shortDate(iso)} isn't in ${w.label} (${rangeText(r)}).` +
+    (right ? ` It's in ${right}. Create ${right} or pick a ${w.label} date.` : ` Pick a ${w.label} date.`);
+}
+const setDateSort = (a, b) => String(a.game_date || "9999").localeCompare(String(b.game_date || "9999")) ||
+  String(a.created_at).localeCompare(String(b.created_at));
+
 const weekSort = (a, b) => (b.season - a.season) || (b.sort_key - a.sort_key) || String(b.created_at).localeCompare(String(a.created_at));
 function setList(id, values) {
   let dl = document.getElementById(id);
@@ -890,25 +962,27 @@ async function viewCommunity(id, tab = "") {
 
   if (tab === "") {
     const weeks = must(await sb.from("weeks")
-      .select("id,community_id,league,season,label,sort_key,created_at,board_sets(id,name,created_at,boards(id,top_team,side_team,locked,squares,kickoff_at,final:scores->final))")
+      .select("id,community_id,league,season,label,sort_key,created_at,board_sets(id,name,game_date,created_at,boards(id,top_team,side_team,locked,squares,kickoff_at,final:scores->final))")
       .eq("community_id", id)).sort(weekSort);
     weeksForForm = weeks;
-    weeks.forEach(w => { w.board_sets.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))); });
+    weeks.forEach(w => { w.board_sets.sort(setDateSort); });
 
-    // Up next: the week with open boards whose game comes first
-    const kick = w => Math.min(...w.board_sets.flatMap(x => x.boards).map(b => Date.parse(b.kickoff_at || "") || Infinity));
-    const open = weeks.filter(w => w.board_sets.some(x => x.boards.some(b => !b.locked)));
-    const next = open.sort((a, b) => (kick(a) - kick(b)) || (a.season - b.season) || (a.sort_key - b.sort_key))[0] || null;
+    // Up next: the earliest game day that still has open boards, and only that day's boards
+    const kick = x => Math.min(...x.boards.map(b => Date.parse(b.kickoff_at || "") || Infinity));
+    const dayKey = x => x.game_date ? Date.parse(x.game_date + "T12:00:00Z") : kick(x);
+    const openSets = weeks.flatMap(w => w.board_sets.filter(x => x.boards.some(b => !b.locked)).map(x => ({ w, x })));
+    const pick = openSets.sort((a, b) => (dayKey(a.x) - dayKey(b.x)) || (a.w.season - b.w.season) || (a.w.sort_key - b.w.sort_key))[0] || null;
+    const next = pick?.w || null, nextSet = pick?.x || null;
 
     body.push(h("div", { class: "league" }, h("span", { class: "dot" }),
       [...new Set(weeks.map(w => `${w.league} ${seasonLabel(w.league, w.season)}`))].join(", ") || "No game weeks yet"));
 
     if (next) {
-      const boards = next.board_sets.flatMap(x => x.boards);
-      const day = next.board_sets[0]?.name || next.label;
+      const boards = nextSet.boards;
+      const day = nextSet.name;
       body.push(h("section", { class: "upnext", "aria-label": "Up next" },
         h("div", { class: "row" }, h("span", { class: "lbl" }, "Up next"), h("span", { class: "wk" }, next.label)),
-        h("a", { class: "day", href: "#/w/" + next.id }, day),
+        h("a", { class: "day", href: "#/s/" + nextSet.id }, day),
         boards.length
           ? h("div", { class: "tiles" }, boards.slice(0, 4).map(b => {
               const n = filled(b);
@@ -918,8 +992,8 @@ async function viewCommunity(id, tab = "") {
                 h("span", {}, b.locked ? "Locked" : `${n} of 100 filled`));
             }))
           : h("span", { class: "lbl" }, "No boards yet. Open the week to add a board set."),
-        (boards.length > 4 || next.board_sets.length > 1) && h("a", { class: "more", href: "#/w/" + next.id },
-          boards.length > 4 ? `See all ${boards.length} boards` : `See all ${next.board_sets.length} game days`)));
+        boards.length > 4 && h("a", { class: "more", href: "#/s/" + nextSet.id }, `See all ${boards.length} boards`),
+        next.board_sets.length > 1 && h("a", { class: "more", href: "#/w/" + next.id }, `See all ${next.board_sets.length} game days in ${next.label}`)));
     }
 
     const rest = weeks.filter(w => w !== next);
@@ -1018,7 +1092,9 @@ async function weekForm(title, ok, current, weeks) {
   if (!label) { toast("Enter the week.", true); return null; }
   // Preset weeks sort in season order; typed-in weeks go after the latest one
   const idx = L ? L.weeks.findIndex(x => x.toLowerCase() === label.toLowerCase()) : -1;
+  if (L?.mode === "week" && idx < 0) { toast(`Pick a week from the ${L.name} list, like "${L.weeks[L.weeks.length > 5 ? 5 : 0]}".`, true); return null; }
   if (idx >= 0) label = L.weeks[idx];
+  if (await weekMissing({ league, season, label })) { toast(`ESPN has no ${label} in the ${league} ${seasonLabel(league, season)} season.`, true); return null; }
   const same = (weeks || []).filter(w => w.league === league && w.season === season && w.id !== current?.id);
   return { league, season, label, sort_key: idx >= 0 ? idx + 1 : Math.max(0, ...same.map(w => w.sort_key)) + 1 };
 }
@@ -1043,6 +1119,12 @@ async function editWeek(w) {
   const weeks = must(await sb.from("weeks").select("id,league,season,sort_key").eq("community_id", w.community_id));
   const row = await weekForm("Edit game week", "Save week", w, weeks);
   if (!row) return;
+  // The week's game days have to fit the new week
+  const sets = must(await sb.from("board_sets").select("name,game_date").eq("week_id", w.id)).filter(x => x.game_date);
+  for (const x of sets) {
+    const msg = await dateProblem(row, x.game_date);
+    if (msg) return toast(`"${x.name}" can't stay in this week. ${msg}`, true);
+  }
   const { error } = await sb.from("weeks").update(row).eq("id", w.id);
   if (error) return toast(error.code === "23505" ? "That week already exists in this community." : error.message, true);
   route();
@@ -1060,27 +1142,42 @@ async function deleteWeek(w) {
 async function viewWeek(id) {
   const w = must(await sb.from("weeks").select("*, communities(name)").eq("id", id).maybeSingle());
   if (!w) throw new Error("Game week not found. Check the link.");
-  const sets = must(await sb.from("board_sets").select("id,name,created_at,boards(id,locked)").eq("week_id", id).order("created_at"));
+  const sets = must(await sb.from("board_sets")
+    .select("id,name,game_date,week_id,community_id,created_at,boards(id,top_team,side_team,locked,squares,sort_order,created_at,final:scores->final)")
+    .eq("week_id", id)).sort(setDateSort);
+  sets.forEach(x => x.boards.sort((a, b) => (a.sort_order - b.sort_order) || String(a.created_at).localeCompare(String(b.created_at))));
+  const range = await weekRange(w);
   const mg = canManage(w.community_id);
+  // Players only see game days that have boards; admins see every game day so they can fill it in
+  const shown = mg ? sets : sets.filter(x => x.boards.length);
+  const tile = b => {
+    const n = filled(b);
+    return h("a", { class: "btile", href: "#/b/" + b.id },
+      h("b", {}, boardName(b)),
+      h("div", { class: "fill" }, h("i", { style: `width:${b.locked ? 100 : n}%` })),
+      h("span", {}, b.final ? "Final" : b.locked ? "Locked" : `${n} of 100 filled`));
+  };
   render(
     mg && h("div", { class: "crumbs" }, h("a", { href: "#/c/" + w.community_id }, w.communities?.name || "Community")),
     h("h1", {}, w.label),
-    h("p", { class: "sub" }, `${w.league}, ${seasonLabel(w.league, w.season)} season` + (mg ? "" : ` (${w.communities?.name || ""})`)),
+    h("p", { class: "sub" }, `${w.league}, ${seasonLabel(w.league, w.season)} season` + (range && range.start !== range.end ? `: ${rangeText(range)}` : "") + (mg ? "" : ` (${w.communities?.name || ""})`)),
     h("div", { class: "actions" },
       btn("Copy week link", () => copy(link("#/w/" + id))),
       mg && btn("Edit week", () => editWeek(w)),
       mg && sets.some(x => x.boards.some(y => !y.locked)) &&
         btn("Lock open boards", () => lockAll(sets.flatMap(x => x.boards.filter(y => !y.locked).map(y => y.id)))),
       mg && btn("New board set", () => newSet(w), "primary")),
-    sets.length
-      ? h("ul", { class: "list" }, sets.map(s => {
-          const locked = s.boards.filter(b => b.locked).length;
-          return h("li", {},
-            h("div", {}, h("a", { href: "#/s/" + s.id }, s.name),
-              h("div", { class: "meta" }, countOf(s.boards.length, "board") + (locked ? `, ${locked} locked` : ""))),
-            mg && h("div", { class: "actions", style: "margin:0;flex-wrap:nowrap" },
-              btn("Rename", () => renameSet(s)), btn("Delete", () => deleteSet(s), "danger")));
-        }))
+    shown.length
+      ? shown.map(x => h("section", { class: "dayset", "aria-label": x.name },
+          h("div", { class: "dayhead" },
+            h("h2", {}, h("a", { href: "#/s/" + x.id }, x.name)),
+            mg && h("div", { class: "actions" },
+              btn("Rename", () => renameSet(x)), btn("Delete", () => deleteSet(x), "danger"))),
+          x.boards.length
+            ? h("div", { class: "btiles" }, x.boards.map(tile))
+            : h("p", { class: "empty", style: "margin:0" }, "No boards yet."),
+          mg && h("div", { class: "actions", style: "margin-top:10px" },
+            btn("Add board", () => addBoard({ ...x, weeks: w }, x.boards.length), x.boards.length ? "" : "primary"))))
       : h("p", { class: "empty" }, mg ? "Add a board set for each game day this week, like Saturday or Sunday." : "No boards posted for this week yet."),
     mg && h("div", { class: "actions", style: "margin-top:28px" }, btn("Delete week", () => deleteWeek(w), "danger"))
   );
@@ -1094,31 +1191,54 @@ function gameDayName(iso) {
   const dt = new Date(Date.UTC(y, m - 1, d));
   return `${dt.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" })} ${dt.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })} ${ordinal(d)}`;
 }
-// Starting date: a date-based week's own date; otherwise the next Saturday (college) or Sunday (NFL)
-function defaultGameDay(w) {
+// Starting date: a date-based week's own date; football weeks use that week's Saturday (college)
+// or Sunday (NFL) from ESPN's calendar. Without ESPN dates, the next Saturday/Sunday from today.
+async function defaultGameDay(w) {
   const k = String(w.sort_key || "");
-  if (/^\d{8}$/.test(k)) return `${k.slice(0, 4)}-${k.slice(4, 6)}-${k.slice(6)}`;
-  const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
+  if (/^\d{8}$/.test(k)) return isoOf(k);
   const want = w.league === "NFL" ? 0 : w.league === "College Football" ? 6 : null;
+  const r = await weekRange(w);
+  if (r) {
+    if (want == null) return r.start;
+    for (let d = r.start; d <= r.end; d = addDays(d, 1)) if (new Date(d + "T12:00:00Z").getUTCDay() === want) return d;
+    return r.start;
+  }
+  const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
   if (want != null) now.setUTCDate(now.getUTCDate() + ((want - now.getUTCDay() + 7) % 7));
   return now.toISOString().slice(0, 10);
 }
+// Set form shared by new and rename. Re-opens with the same entries when the date doesn't fit the week.
+async function setForm({ title, ok, w, date, name }) {
+  const r = await weekRange(w);
+  for (;;) {
+    const v = await modal({ title, ok,
+      text: `Pick the game day and the name fills in. You can change the name.` + (r && r.start !== r.end ? ` ${w.label} runs ${rangeText(r)}.` : ""),
+      fields: [
+        { name: "date", label: "Game day", type: "date", value: date, required: true, ...(r ? { min: r.start, max: r.end } : {}) },
+        { name: "name", label: "Set name", value: name, required: true, maxlength: 80 }
+      ],
+      after: inputs => {
+        let auto = inputs.name.value === gameDayName(date) ? inputs.name.value : null;
+        inputs.date.addEventListener("change", () => {
+          const n = gameDayName(inputs.date.value);
+          if (n && (auto === null ? !inputs.name.value.trim() : inputs.name.value === auto)) { auto = n; inputs.name.value = n; }
+        });
+      } });
+    if (!v) return null;
+    date = v.date; name = v.name;
+    if (!v.date) { toast("Pick the game day.", true); continue; }
+    if (!v.name.trim()) { toast("Enter a set name.", true); continue; }
+    const msg = await dateProblem(w, v.date);
+    if (msg) { toast(msg, true); continue; }
+    return { name: v.name.trim(), game_date: v.date };
+  }
+}
 async function newSet(w) {
-  const day = defaultGameDay(w);
-  const v = await modal({ title: "New board set", text: `Group the boards for one game day in ${w.label}. Pick the date and the name fills in. You can change the name.`,
-    fields: [
-      { name: "date", label: "Game day", type: "date", value: day },
-      { name: "name", label: "Set name", value: gameDayName(day), required: true, maxlength: 80 }
-    ], ok: "Create set",
-    after: inputs => {
-      let auto = inputs.name.value;
-      inputs.date.addEventListener("change", () => {
-        if (inputs.name.value === auto) { auto = gameDayName(inputs.date.value); inputs.name.value = auto; }
-      });
-    } });
-  if (!v || !v.name.trim()) return;
+  const day = await defaultGameDay(w);
+  const v = await setForm({ title: "New board set", ok: "Create set", w, date: day, name: gameDayName(day) });
+  if (!v) return;
   try {
-    const row = must(await sb.from("board_sets").insert({ community_id: w.community_id, week_id: w.id, name: v.name.trim() }).select().single());
+    const row = must(await sb.from("board_sets").insert({ community_id: w.community_id, week_id: w.id, ...v }).select().single());
     go("#/s/" + row.id);
   } catch (e) { toast(e.message, true); }
 }
@@ -1130,21 +1250,21 @@ async function moveSet(set) {
     fields: [{ name: "week", label: "Game week", value: set.week_id,
       options: weeks.map(w => ({ value: w.id, label: `${w.label} — ${w.league} ${seasonLabel(w.league, w.season)}` })) }], ok: "Move set" });
   if (!v) return;
+  const target = weeks.find(w => w.id === v.week);
+  if (set.game_date && target) {
+    const msg = await dateProblem(target, set.game_date);
+    if (msg) return toast(msg, true);
+  }
   try { must(await sb.from("board_sets").update({ week_id: v.week }).eq("id", set.id)); route(); }
   catch (e) { toast(e.message, true); }
 }
 
 async function renameSet(set) {
-  const v = await modal({ title: "Rename board set", text: "Type a name, or pick a game day to fill it in.",
-    fields: [
-      { name: "date", label: "Game day", type: "date", value: "" },
-      { name: "name", label: "Set name", value: set.name, required: true, maxlength: 80 }
-    ], ok: "Save name",
-    after: inputs => inputs.date.addEventListener("change", () => {
-      const n = gameDayName(inputs.date.value); if (n) inputs.name.value = n;
-    }) });
-  if (!v || !v.name.trim()) return;
-  try { must(await sb.from("board_sets").update({ name: v.name.trim() }).eq("id", set.id)); route(); }
+  const w = set.weeks?.id ? { ...set.weeks, community_id: set.community_id }
+    : must(await sb.from("weeks").select("id,label,league,season,sort_key,community_id").eq("id", set.week_id).maybeSingle());
+  const v = await setForm({ title: "Edit board set", ok: "Save set", w: w || {}, date: set.game_date || "", name: set.name });
+  if (!v) return;
+  try { must(await sb.from("board_sets").update(v).eq("id", set.id)); route(); }
   catch (e) { toast(e.message, true); }
 }
 
@@ -1186,7 +1306,7 @@ async function deleteCommunity(c) {
 }
 
 async function viewSet(id) {
-  const set = must(await sb.from("board_sets").select("id,name,community_id,week_id,communities(name),weeks(id,label,league,season,sort_key)").eq("id", id).maybeSingle());
+  const set = must(await sb.from("board_sets").select("id,name,game_date,community_id,week_id,communities(name),weeks(id,label,league,season,sort_key)").eq("id", id).maybeSingle());
   if (!set) throw new Error("Board set not found. Check the link.");
   const boards = must(await sb.from("boards").select("*").eq("set_id", id)
     .order("sort_order").order("created_at"));
