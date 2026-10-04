@@ -366,7 +366,7 @@ main.wide{max-width:1400px}
 .drawer .ditem:hover,.drawer .ditem:focus-visible{background:rgba(0,0,0,.06)}
 .drawer .ditem.primary{background:#F2B61D;color:#1D1D1D}
 .drawer .ditem.danger{color:#B3261E}
-.helptop{display:flex;justify-content:flex-end;margin:0 0 4px}
+.helptop{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin:0 0 4px}
 .helptop a{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:999px;font-size:15px;font-weight:700;
   text-decoration:none;color:var(--chalk);background:var(--btn);box-shadow:var(--btn-edge)}
 .drawer .dlabel{padding:4px 14px 8px;font-size:13px;font-weight:700;color:#6B6B6B;text-transform:uppercase;letter-spacing:.4px}
@@ -693,7 +693,9 @@ function topbar() {
 }
 function render(...nodes) {
   $app.replaceChildren(topbar(), h("main", { class: "wrap" },
-    location.hash !== "#/help" && h("div", { class: "helptop" }, h("a", { href: "#/help" }, icon("help", 18), "Help")),
+    (location.hash !== "#/help" || S.me?.is_owner) && h("div", { class: "helptop" },
+      location.hash !== "#/help" && h("a", { href: "#/help" }, icon("help", 18), "Help"),
+      S.me?.is_owner && iconBtn("menu", "Owner menu", ownerMenu, "solid")),
     ...nodes));
   requestAnimationFrame(fitBoards);
 }
@@ -844,7 +846,6 @@ async function viewHome() {
   const myReq = S.me && !isSuper() && !isComm() ? must(await sb.from("access_requests").select("id,kind,new_name,status,community_id,created_at")
     .eq("user_id", S.me.id).order("created_at", { ascending: false }).limit(1).maybeSingle()) : null;
   render(
-    S.me?.is_owner && ownerControls(),
     mine.length ? [h("h1", {}, "My pools"),
       h("ul", { class: "list" }, mine.map(p => h("li", {},
         h("div", {}, h("a", { href: "#/p/" + p.pool_id }, p.name),
@@ -2390,19 +2391,17 @@ async function boardFromVote(p, g) {
   } catch (e) { toast(e.message, true); }
 }
 
-// Owner controls: one card, one row per switch. Each toggle still asks before it changes anything.
-function ownerControls() {
-  const row = (name, on, onText, offText, fn) => h("div", { class: "ocrow" },
-    h("div", { class: "octxt" }, h("b", {}, name), h("span", {}, on ? onText : offText)),
-    h("button", { type: "button", class: "otog" + (on ? " on" : ""), role: "switch", "aria-checked": on ? "true" : "false",
-      "aria-label": `${name}: ${on ? "on" : "off"}`, onclick: fn }, h("span", { class: "otxt" }, on ? "On" : "Off"), h("span", { class: "oknob" })));
-  return h("section", { class: "owner", "aria-label": "Owner controls" },
-    h("div", { class: "ohead" }, h("b", {}, "Owner controls"), h("a", { href: "#/preview" }, "What's coming")),
-    row("Bracket pools", S.poolsOn, "Admins and players see them.", "Hidden. Only you see them.", togglePools),
-    row("Vote pages", S.votesOn, "Admins can open votes. Anyone with the link can vote.", "Hidden. Only you see them.", toggleVotes),
-    row("Commissioner unlock", S.commUnlock, "Commissioners can unlock boards.", "Only you can unlock boards.", toggleCommUnlock));
+// Owner menu (☰ next to Help on every page): the switches and What's coming, in the side pop-out
+function ownerMenu() {
+  openDrawer("Owner controls", [
+    { label: "Bracket pools", toggle: !!S.poolsOn, fn: togglePools },
+    { label: "Vote pages", toggle: !!S.votesOn, fn: toggleVotes },
+    { label: "Commissioner unlock", toggle: !!S.commUnlock, fn: toggleCommUnlock },
+    "-",
+    { label: "What's coming", fn: () => go("#/preview") },
+    { label: "People", fn: () => go("#/people") },
+    { label: "Help and guides", fn: () => go("#/help") }]);
 }
-
 async function toggleVotes() {
   const on = !S.votesOn;
   if (!await confirmBox(on ? "Turn on vote pages?" : "Turn off vote pages?",
