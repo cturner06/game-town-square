@@ -318,8 +318,9 @@ main.wide{max-width:1400px}
 .drawer .ditem:hover,.drawer .ditem:focus-visible{background:rgba(0,0,0,.06)}
 .drawer .ditem.primary{background:#F2B61D;color:#1D1D1D}
 .drawer .ditem.danger{color:#B3261E}
-.helpfoot{margin:36px 0 8px;text-align:center}
-.helpfoot a{display:inline-flex;align-items:center;gap:6px;font-weight:600;color:var(--chalk-dim)}
+.helptop{display:flex;justify-content:flex-end;margin:0 0 4px}
+.helptop a{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:999px;font-size:15px;font-weight:700;
+  text-decoration:none;color:var(--chalk);background:var(--btn);box-shadow:var(--btn-edge)}
 .drawer .dlabel{padding:4px 14px 8px;font-size:13px;font-weight:700;color:#6B6B6B;text-transform:uppercase;letter-spacing:.4px}
 .drawer hr{border:0;border-top:1px solid rgba(0,0,0,.14);margin:6px 0 12px}
 .drawer .iconbtn{color:var(--ink);background:transparent;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
@@ -629,8 +630,9 @@ function topbar() {
   );
 }
 function render(...nodes) {
-  $app.replaceChildren(topbar(), h("main", { class: "wrap" }, ...nodes,
-    location.hash !== "#/help" && h("p", { class: "helpfoot" }, h("a", { href: "#/help" }, icon("help", 18), "Help and guides"))));
+  $app.replaceChildren(topbar(), h("main", { class: "wrap" },
+    location.hash !== "#/help" && h("div", { class: "helptop" }, h("a", { href: "#/help" }, icon("help", 18), "Help")),
+    ...nodes));
   requestAnimationFrame(fitBoards);
 }
 function fitBoards() {
