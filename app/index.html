@@ -445,6 +445,9 @@ const boardName = b => [b.top_team, b.side_team].filter(Boolean).join(" vs ") ||
 const link = hash => location.origin + location.pathname + hash;
 const isSuper = () => !!(S.me && S.me.is_super_admin);
 const isComm = () => !!S.me?.is_commissioner;   // Commissioners run every community
+// Free Total Access: Commissioners and the Board Master get every plan and add-on, including ones added later.
+// Any future add-on check should use this.
+const totalAccess = p => !!(p?.is_commissioner || p?.is_owner);
 const canManage = cid => !!S.me && (isSuper() || isComm() || S.admin.has(cid));
 // Commissioner: runs the communities they're assigned to, manages those admin lists,
 // and unlocks boards there once the Board Master turns that on.
@@ -546,12 +549,12 @@ async function refreshRoles(force) {
   _roleCheckAt = Date.now();
   try {
     const [{ data: p }, { data: ca }] = await Promise.all([
-      sb.from("profiles").select("is_commissioner,is_super_admin,unlimited_communities").eq("id", S.me.id).maybeSingle(),
+      sb.from("profiles").select("is_commissioner,is_super_admin,unlimited_communities,playoffs_addon").eq("id", S.me.id).maybeSingle(),
       sb.from("community_admins").select("community_id").eq("user_id", S.me.id)]);
     if (!p || !ca) return;
     const admin = new Set(ca.map(r => r.community_id));
     const changed = !!p.is_commissioner !== !!S.me.is_commissioner || !!p.is_super_admin !== !!S.me.is_super_admin ||
-      !!p.unlimited_communities !== !!S.me.unlimited_communities ||
+      !!p.unlimited_communities !== !!S.me.unlimited_communities || !!p.playoffs_addon !== !!S.me.playoffs_addon ||
       admin.size !== S.admin.size || [...admin].some(x => !S.admin.has(x));
     if (!changed) return;
     Object.assign(S.me, p); S.admin = admin;
@@ -565,12 +568,12 @@ addEventListener("hashchange", () => refreshRoles(false));
 setInterval(() => refreshRoles(true), 60000);
 
 function roleSnapshot() {
-  return { c: !!S.me.is_commissioner, s: !!S.me.is_super_admin, u: !!S.me.unlimited_communities, a: [...S.admin].sort() };
+  return { c: !!S.me.is_commissioner, s: !!S.me.is_super_admin, u: !!S.me.unlimited_communities, p: !!S.me.playoffs_addon, a: [...S.admin].sort() };
 }
 async function checkRoles() {
   if (!S.me?.id || S.noticeOpen) return;
   const now = roleSnapshot(), was = S.me.roles_seen;
-  const same = was && was.c === now.c && was.s === now.s && was.u === now.u && JSON.stringify([...(was.a || [])].sort()) === JSON.stringify(now.a);
+  const same = was && was.c === now.c && was.s === now.s && was.u === now.u && !!was.p === now.p && JSON.stringify([...(was.a || [])].sort()) === JSON.stringify(now.a);
   if (same) return;
   // First visit after this feature went in, or the owner: just remember where things stand
   if (!was || S.me.is_owner) { await sb.rpc("ack_roles", { r: now }); S.me.roles_seen = now; return; }
@@ -585,18 +588,21 @@ async function checkRoles() {
     "Add and remove community admins (not Commissioners or Super admins).",
     "Edit locked boards.",
     S.commUnlock ? "Unlock boards." : "Unlock boards once the Board Master turns that on.",
-    "Communities and locked boards can't be deleted."] });
+    "Communities and locked boards can't be deleted.",
+    "Free Total Access: every plan and add-on is included, like unlimited communities and Playoffs, plus anything added later."] });
   if (now.s && !was.s) parts.push({ head: "You're now a Super admin", items: [
     "Manage every community.", "Create and delete communities.", "Add and remove admins.",
     "Edit and delete locked boards.", "Use the People page."] });
   if (added.length && !now.c && !now.s) for (const x of added) parts.push({ head: `You're now an admin of ${nm(x)}`, items: [
     `In ${nm(x)}, create weeks, game days, and boards.`, "Edit and delete open boards.", "Locked boards stay locked."] });
-  if (now.u && !was.u) parts.push({ head: "You're on the unlimited plan", items: ["You can now request more than one community."] });
+  if (now.u && !was.u && !now.c) parts.push({ head: "You're on the unlimited plan", items: ["You can own more than one community."] });
+  if (now.p && !was.p && !now.c) parts.push({ head: "You have the Playoffs add-on", items: ["Communities you create can run playoff brackets and bowl pick'em."] });
   const gone = [];
   if (was.c && !now.c) gone.push("You're no longer a Commissioner.");
   if (was.s && !now.s) gone.push("You're no longer a Super admin.");
   for (const x of dropped) gone.push(`You're no longer an admin of ${nm(x)}.`);
-  if (was.u && !now.u) gone.push("You're back to one community.");
+  if (was.u && !now.u && !now.c) gone.push("You're back to one community.");
+  if (was.p && !now.p && !now.c) gone.push("You no longer have the Playoffs add-on.");
   if (gone.length) parts.push({ head: "Access removed", items: gone });
   if (parts.length) await roleNotice(parts);
   await sb.rpc("ack_roles", { r: now }); S.me.roles_seen = now;
@@ -731,7 +737,7 @@ addEventListener("hashchange", route);
 /* ---------- Help ----------
    Each role sees its own guide plus every guide below it. The owner and Super admins see all of them.
    The same text is in the PDF guides (app/guides/), so the two always match. */
-const GUIDES = [{"id": "player", "title": "Player Guide", "who": "For anyone who plays on a board", "intro": "Game Town Square runs squares boards for games. Boards use points, not money.", "sections": [{"h": "Open a board", "k": "p", "items": ["The person running the board sends you a link. It can open one board, a game day, or a whole week.", "You don't need a login to look at a board."]}, {"h": "Read the board", "k": "list", "items": ["The top team runs across the top. The side team runs down the left side.", "Each square has a number from 1 to 100 in the corner and the owner's name.", "When the board locks, the numbers 0 to 9 are drawn across the top and down the side.", "The right column shows the points paid for each quarter and the final."]}, {"h": "How a square wins", "k": "steps", "items": ["At the end of each quarter, take the last digit of each team's score.", "Find the top team's digit across the top and the side team's digit down the side.", "The square where they meet wins that quarter's points.", "Men's college basketball pays Half and Final only."]}, {"h": "Get a square", "k": "list", "items": ["Ask the person running the board. They put your name in the square.", "The board locks 15 minutes before kickoff. After that, names and numbers can't change.", "Squares nobody took at lock time are marked Plug."]}, {"h": "Scores", "k": "list", "items": ["Scores update on their own from ESPN during the game. A Live tag shows while the game is on.", "If the score looks behind, tap the menu button (three lines) and choose Update score."]}, {"h": "Save or share the board", "k": "steps", "items": ["Tap the menu button (three lines) next to the board.", "Choose Save image, Share image, or Copy link."]}]}, {"id": "helper", "title": "Helper Guide", "who": "For people helping on one board", "intro": "A helper fills in one board for the admin. You can't change any other board.", "sections": [{"h": "Get set up", "k": "steps", "items": ["Create a login on Game Town Square.", "Send the admin the email you used. They add you as a helper on their board.", "Sign in and open the board link they send you."]}, {"h": "Fill in names", "k": "steps", "items": ["Tap a square.", "Type the person's name and tap Save name.", "To clear a square, erase the name and tap Save name."]}, {"h": "Draw numbers", "k": "list", "items": ["Tap a number box across the top or down the side and enter 0 to 9.", "Or leave them blank. Numbers are drawn on their own when the board locks."]}, {"h": "Scores", "k": "list", "items": ["Tap the menu button (three lines) and choose Scores.", "Type each team's score, or choose Pull from ESPN.", "Typing scores turns ESPN off for that board until you pull from ESPN again."]}, {"h": "Lock the board", "k": "list", "items": ["Tap the menu button and choose Lock board. Locking draws any blank numbers.", "If you don't lock it, the board locks itself 15 minutes before kickoff.", "After it locks, nothing can change. Only the Board Master can unlock it, or a Commissioner when the Board Master allows it."]}, {"h": "What helpers can't do", "k": "list", "items": ["Change board details like teams, colors, or points.", "Move or delete the board.", "Touch any other board."]}]}, {"id": "admin", "title": "Community Admin Guide", "who": "For people who run a community", "intro": "Community admins set up the weeks, game days, and boards for their community.", "sections": [{"h": "Get access", "k": "steps", "items": ["Create a login on Game Town Square.", "On the home screen, tap Request admin access.", "Pick the community and add a note about who you are.", "A Commissioner approves it. The next time you open the app, a message shows what you can now do."]}, {"h": "How it's organized", "k": "p", "items": ["Community, then game week, then game day, then board.", "A game day holds the boards for one date, like Saturday Oct 10th."]}, {"h": "Create a game week", "k": "steps", "items": ["Open your community and tap the + button.", "Pick the league and season.", "College Football and NFL: pick the week from the list. The weeks match ESPN, and the week page shows its dates.", "Basketball, baseball, hockey, and soccer: pick the game date instead."]}, {"h": "Create a game day", "k": "steps", "items": ["Open the week and tap New board set.", "Pick the game day. Only dates inside that week are allowed. The name fills in, like Saturday Oct 10th.", "You can change the name if you want."]}, {"h": "Add a board", "k": "steps", "items": ["On the week page, tap Add board under the game day. On a board, you can also use the menu button and choose Add board.", "Enter the sport, the top team, the side team, and their colors.", "Enter the kickoff line, points per square, the points for each quarter and the final, and the bottom note."]}, {"h": "Fill names and numbers", "k": "list", "items": ["Tap a square to enter or clear a name.", "Tap a number box to enter a drawn number, 0 to 9.", "You can add helpers to fill in a board for you: menu button, then Helpers, then Add helper. They need a login first."]}, {"h": "Locking", "k": "list", "items": ["When the game is found on ESPN, its kickoff time is saved. The board locks itself 15 minutes before kickoff.", "At lock, blank numbers are drawn and empty squares are marked Plug.", "To lock early: menu button, then Lock board. Lock open boards locks every open board in that game day or week.", "Locked boards can't be edited or deleted. Only the Board Master can unlock, or a Commissioner when the Board Master allows it."]}, {"h": "Scores", "k": "list", "items": ["Scores pull from ESPN on their own when the team names match ESPN.", "To type scores, use the menu button and choose Scores."]}, {"h": "The board menu", "k": "list", "items": ["Save image, Share image, Copy link.", "Scores, Edit details, Lock board, Move board, Move up and Move down, Helpers.", "The game day's buttons: Add board, Lock open boards, Copy set link, Rename set, Move to week.", "Delete board, at the bottom. Open boards only."]}, {"h": "Share with players", "k": "list", "items": ["Copy week link sends the whole week.", "Copy set link sends one game day.", "Copy link in a board's menu sends one board."]}]}, {"id": "commissioner", "title": "Commissioner Guide", "who": "For Commissioners", "intro": "Commissioners run every community and approve new admins. Everything in the Community Admin Guide applies to you too.", "sections": [{"h": "What you can do", "k": "list", "items": ["Run weeks, game days, and boards in every community.", "Approve or deny admin requests.", "Create new communities.", "Add and remove community admins.", "Change names, numbers, and details on locked boards. The board stays locked.", "Unlock boards when the Board Master turns that on."]}, {"h": "Approve admin requests", "k": "steps", "items": ["When someone asks to join a community, Admin requests shows at the top of your home screen.", "Each request shows who's asking, which community, and their note.", "Tap Approve or Deny. Approved admins get a message the next time they open the app."]}, {"h": "Create a community", "k": "steps", "items": ["On the home screen, tap New community.", "Enter the name. You're added as its admin."]}, {"h": "Manage admins", "k": "steps", "items": ["Open the community and go to the Admins tab.", "Tap Add admin and enter their login email. They need a login first.", "Tap Remove to take someone off. You can't remove other Commissioners."]}, {"h": "Fix a locked board", "k": "list", "items": ["Open the board. Tap a square or number box to fix it, the same as an open board.", "To change teams, colors, or points, tap the menu button and choose Edit details.", "The board stays locked the whole time. Players can't change anything."]}, {"h": "Unlock a board", "k": "list", "items": ["This only works after the Board Master turns on Commissioner unlock.", "Open the board, tap the menu button, and choose Unlock. You'll enter your password again.", "The board shows that you unlocked it."]}, {"h": "What you can't do", "k": "list", "items": ["Delete communities.", "Delete locked boards.", "Remove other Commissioners."]}]}];
+const GUIDES = [{"id": "player", "title": "Player Guide", "who": "For anyone who plays on a board", "intro": "Game Town Square runs squares boards for games. Boards use points, not money.", "sections": [{"h": "Open a board", "k": "p", "items": ["The person running the board sends you a link. It can open one board, a game day, or a whole week.", "You don't need a login to look at a board."]}, {"h": "Read the board", "k": "list", "items": ["The top team runs across the top. The side team runs down the left side.", "Each square has a number from 1 to 100 in the corner and the owner's name.", "When the board locks, the numbers 0 to 9 are drawn across the top and down the side.", "The right column shows the points paid for each quarter and the final."]}, {"h": "How a square wins", "k": "steps", "items": ["At the end of each quarter, take the last digit of each team's score.", "Find the top team's digit across the top and the side team's digit down the side.", "The square where they meet wins that quarter's points.", "Men's college basketball pays Half and Final only."]}, {"h": "Get a square", "k": "list", "items": ["Ask the person running the board. They put your name in the square.", "The board locks 15 minutes before kickoff. After that, names and numbers can't change.", "Squares nobody took at lock time are marked Plug."]}, {"h": "Scores", "k": "list", "items": ["Scores update on their own from ESPN during the game. A Live tag shows while the game is on.", "If the score looks behind, tap the menu button (three lines) and choose Update score."]}, {"h": "Save or share the board", "k": "steps", "items": ["Tap the menu button (three lines) next to the board.", "Choose Save image, Share image, or Copy link."]}]}, {"id": "helper", "title": "Helper Guide", "who": "For people helping on one board", "intro": "A helper fills in one board for the admin. You can't change any other board.", "sections": [{"h": "Get set up", "k": "steps", "items": ["Create a login on Game Town Square.", "Send the admin the email you used. They add you as a helper on their board.", "Sign in and open the board link they send you."]}, {"h": "Fill in names", "k": "steps", "items": ["Tap a square.", "Type the person's name and tap Save name.", "To clear a square, erase the name and tap Save name."]}, {"h": "Draw numbers", "k": "list", "items": ["Tap a number box across the top or down the side and enter 0 to 9.", "Or leave them blank. Numbers are drawn on their own when the board locks."]}, {"h": "Scores", "k": "list", "items": ["Tap the menu button (three lines) and choose Scores.", "Type each team's score, or choose Pull from ESPN.", "Typing scores turns ESPN off for that board until you pull from ESPN again."]}, {"h": "Lock the board", "k": "list", "items": ["Tap the menu button and choose Lock board. Locking draws any blank numbers.", "If you don't lock it, the board locks itself 15 minutes before kickoff.", "After it locks, nothing can change. Only the Board Master can unlock it, or a Commissioner when the Board Master allows it."]}, {"h": "What helpers can't do", "k": "list", "items": ["Change board details like teams, colors, or points.", "Move or delete the board.", "Touch any other board."]}]}, {"id": "admin", "title": "Community Admin Guide", "who": "For people who run a community", "intro": "Community admins set up the weeks, game days, and boards for their community.", "sections": [{"h": "Get access", "k": "steps", "items": ["Create a login on Game Town Square.", "On the home screen, tap Request admin access.", "Pick the community and add a note about who you are.", "A Commissioner approves it. The next time you open the app, a message shows what you can now do."]}, {"h": "How it's organized", "k": "p", "items": ["Community, then game week, then game day, then board.", "A game day holds the boards for one date, like Saturday Oct 10th."]}, {"h": "Create a game week", "k": "steps", "items": ["Open your community and tap the + button.", "Pick the league and season.", "College Football and NFL: pick the week from the list. The weeks match ESPN, and the week page shows its dates.", "Basketball, baseball, hockey, and soccer: pick the game date instead."]}, {"h": "Create a game day", "k": "steps", "items": ["Open the week and tap New board set.", "Pick the game day. Only dates inside that week are allowed. The name fills in, like Saturday Oct 10th.", "You can change the name if you want."]}, {"h": "Add a board", "k": "steps", "items": ["On the week page, tap Add board under the game day. On a board, you can also use the menu button and choose Add board.", "Enter the sport, the top team, the side team, and their colors.", "Enter the kickoff line, points per square, the points for each quarter and the final, and the bottom note."]}, {"h": "Fill names and numbers", "k": "list", "items": ["Tap a square to enter or clear a name.", "Tap a number box to enter a drawn number, 0 to 9.", "You can add helpers to fill in a board for you: menu button, then Helpers, then Add helper. They need a login first."]}, {"h": "Locking", "k": "list", "items": ["When the game is found on ESPN, its kickoff time is saved. The board locks itself 15 minutes before kickoff.", "At lock, blank numbers are drawn and empty squares are marked Plug.", "To lock early: menu button, then Lock board. Lock open boards locks every open board in that game day or week.", "Locked boards can't be edited or deleted. Only the Board Master can unlock, or a Commissioner when the Board Master allows it."]}, {"h": "Scores", "k": "list", "items": ["Scores pull from ESPN on their own when the team names match ESPN.", "To type scores, use the menu button and choose Scores."]}, {"h": "The board menu", "k": "list", "items": ["Save image, Share image, Copy link.", "Scores, Edit details, Lock board, Move board, Move up and Move down, Helpers.", "The game day's buttons: Add board, Lock open boards, Copy set link, Rename set, Move to week.", "Delete board, at the bottom. Open boards only."]}, {"h": "Share with players", "k": "list", "items": ["Copy week link sends the whole week.", "Copy set link sends one game day.", "Copy link in a board's menu sends one board."]}]}, {"id": "commissioner", "title": "Commissioner Guide", "who": "For Commissioners", "intro": "Commissioners run every community and approve new admins. Everything in the Community Admin Guide applies to you too.", "sections": [{"h": "What you can do", "k": "list", "items": ["Run weeks, game days, and boards in every community.", "Approve or deny admin requests.", "Create new communities.", "Add and remove community admins.", "Change names, numbers, and details on locked boards. The board stays locked.", "Unlock boards when the Board Master turns that on.", "Free Total Access: every plan and add-on is included, like unlimited communities and Playoffs (playoff bracket and bowl pick'em), plus anything added later."]}, {"h": "Approve admin requests", "k": "steps", "items": ["When someone asks to join a community, Admin requests shows at the top of your home screen.", "Each request shows who's asking, which community, and their note.", "Tap Approve or Deny. Approved admins get a message the next time they open the app."]}, {"h": "Create a community", "k": "steps", "items": ["On the home screen, tap New community.", "Enter the name. You're added as its admin."]}, {"h": "Manage admins", "k": "steps", "items": ["Open the community and go to the Admins tab.", "Tap Add admin and enter their login email. They need a login first.", "Tap Remove to take someone off. You can't remove other Commissioners."]}, {"h": "Fix a locked board", "k": "list", "items": ["Open the board. Tap a square or number box to fix it, the same as an open board.", "To change teams, colors, or points, tap the menu button and choose Edit details.", "The board stays locked the whole time. Players can't change anything."]}, {"h": "Unlock a board", "k": "list", "items": ["This only works after the Board Master turns on Commissioner unlock.", "Open the board, tap the menu button, and choose Unlock. You'll enter your password again.", "The board shows that you unlocked it."]}, {"h": "What you can't do", "k": "list", "items": ["Delete communities.", "Delete locked boards.", "Remove other Commissioners."]}]}];
 function guidesForMe() {
   if (S.me?.is_owner || isSuper()) return GUIDES;
   const ids = ["player"];
@@ -965,7 +971,7 @@ async function viewPeople() {
       h("label", { class: "check" }, sup, h("span", {}, "Super admin"),
         p.is_owner && h("span", { class: "meta" }, " (the owner stays super admin)")),
       S.me.is_owner && !p.is_owner && h("label", { class: "check" }, com, h("span", {}, "Commissioner"),
-        h("span", { class: "meta" }, " Runs the communities checked below")),
+        h("span", { class: "meta" }, " Runs every community. Free Total Access: every plan and add-on.")),
       comms.length ? h("div", { class: "commlist" },
         h("div", { class: "meta" }, "Manages:"),
         comms.map(c => {
@@ -977,14 +983,22 @@ async function viewPeople() {
           return h("label", { class: "check" }, box, h("span", {}, c.name));
         })) : h("p", { class: "meta" }, "No communities yet."),
       p.is_super_admin && h("p", { class: "meta" }, "Super admins manage every community."),
+      // Plans. Commissioners get Free Total Access, so both boxes show as included and can't be changed.
       S.me.is_owner && !p.is_owner && (() => {
-        const un = h("input", { type: "checkbox", checked: !!p.unlimited_communities });
-        un.addEventListener("change", () => act(async () => {
-          must(await sb.rpc("admin_set_unlimited", { uid: p.id, val: un.checked }));
-          toast(un.checked ? `${p.display_name} is on unlimited communities` : `${p.display_name} is back to one community`);
-        }, un));
-        return h("label", { class: "check" }, un, h("span", {}, "Unlimited communities plan"),
-          h("span", { class: "meta" }, ` Owns ${p.owned || 0}`));
+        const free = totalAccess(p);
+        const plan = (on, label, note, rpc, yes, no) => {
+          const box = h("input", { type: "checkbox", checked: free || on, disabled: free });
+          box.addEventListener("change", () => act(async () => {
+            must(await sb.rpc(rpc, { uid: p.id, val: box.checked }));
+            toast(box.checked ? yes : no);
+          }, box));
+          return h("label", { class: "check" }, box, h("span", {}, label), h("span", { class: "meta" }, free ? " Included (Free Total Access)" : note));
+        };
+        return [
+          plan(p.unlimited_communities, "Unlimited communities plan", ` Owns ${p.owned || 0}`, "admin_set_unlimited",
+            `${p.display_name} is on unlimited communities`, `${p.display_name} is back to one community`),
+          plan(p.playoffs_addon, "Playoffs add-on", " Playoff bracket and bowl pick'em in the communities they create", "admin_set_playoffs",
+            `${p.display_name} has the Playoffs add-on`, `${p.display_name} no longer has the Playoffs add-on`)];
       })(),
       h("div", { class: "actions" },
         btn("Send password reset", async () => {
@@ -1149,6 +1163,8 @@ async function viewCommunity(id, tab = "") {
   const c = must(await sb.from("communities").select("*").eq("id", id).maybeSingle());
   if (!c) throw new Error("Community not found.");
   if (!canManage(id)) throw new Error("You aren't an admin on this community.");
+  // Pools need the Playoffs add-on on the community's creator (Commissioners and the Board Master always have it)
+  const playoffs = tab === "pools" ? !!must(await sb.rpc("community_playoffs", { cid: id })) : true;
   const tabs = [["", "Squares", "squares"], votesShown() && ["vote", "Vote", "vote"], poolsShown() && ["pools", "Pools", "pools"], (isSuper() || isCommish(id)) && ["admins", "Admins", "admins"]].filter(Boolean);
   if (!tabs.some(t => t[0] === tab)) tab = "";
 
@@ -1159,7 +1175,7 @@ async function viewCommunity(id, tab = "") {
       h("div", { class: "btns" },
         iconBtn("edit", "Rename community", () => renameCommunity(c)),
         tab === "" && iconBtn("plus", "New game week", () => newWeek(id, weeksForForm), "solid"),
-        tab === "pools" && iconBtn("plus", "New pool", () => newPool(id), "solid"),
+        tab === "pools" && playoffs && iconBtn("plus", "New pool", () => newPool(id), "solid"),
         tab === "vote" && iconBtn("plus", "New vote", () => newVote(c), "solid")))
   ];
   let weeksForForm = [];
@@ -1244,6 +1260,8 @@ async function viewCommunity(id, tab = "") {
     body.push(
       h("p", { class: "seclbl", style: "margin-top:8px" }, "Bracket pools"),
       !S.poolsOn && h("p", { class: "meta" }, "Hidden. Only you can see pools until you turn them on from the home screen."),
+      !playoffs && h("div", { class: "panel" }, h("p", { style: "margin:0" }, h("b", {}, "Playoffs add-on needed. "),
+        "Playoff brackets and bowl pick'em are an add-on for the admin who created this community. Ask the Board Master to add it.")),
       pools.length
         ? h("ul", { class: "list" }, pools.map(p => h("li", {},
             h("div", {}, h("a", { href: "#/p/" + p.id }, p.name),
