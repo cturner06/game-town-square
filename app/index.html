@@ -353,6 +353,42 @@ main.wide{max-width:1400px}
 .otog.on{background:#1E6B2A;color:#fff}
 .otog.on .otxt{right:auto;left:12px}
 .otog.on .oknob{left:44px}
+.plist{display:flex;flex-direction:column;border-radius:14px;background:var(--card);box-shadow:var(--card-edge);overflow:hidden}
+.prow2 + .prow2{border-top:1px solid var(--line)}
+.phd{display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;border:0;background:none;color:var(--chalk);font:inherit;text-align:left;cursor:pointer;min-height:60px}
+.av{flex-shrink:0;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;background:var(--chip);color:var(--chalk)}
+.av.r-owner,.av.r-commissioner{background:#F2B61D;color:#1D1D1D}
+.av.r-superadmin{background:var(--hero);color:#F2EEE9}
+.pnm{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.pnm b{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pnm b small{font-weight:400;color:var(--chalk-dim)}
+.pnm > span{font-size:13px;color:var(--chalk-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rtag{flex-shrink:0;font-size:12px;font-weight:700;padding:4px 9px;border-radius:999px;background:var(--chip);color:var(--chalk)}
+.rtag.r-owner,.rtag.r-commissioner{background:#F2B61D;color:#1D1D1D}
+.rtag.r-superadmin{background:var(--hero);color:#F2EEE9}
+.rtag.r-noaccess{background:transparent;color:var(--chalk-dim);box-shadow:inset 0 0 0 1px var(--line-2)}
+.chev{flex-shrink:0;font-size:22px;font-weight:700;color:var(--chalk-dim);transition:transform .15s}
+.prow2.open .chev{transform:rotate(90deg)}
+.ppanel{padding:0 14px 14px 64px}
+.plbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--chalk-dim);margin:12px 0 6px}
+.seg{display:inline-flex;flex-wrap:wrap;gap:4px;padding:4px;border-radius:12px;background:var(--chip)}
+.seg button{border:0;background:none;padding:8px 12px;min-height:38px;border-radius:9px;font:inherit;font-size:14px;font-weight:600;color:var(--chalk);cursor:pointer}
+.seg button.on{background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.18);font-weight:700}
+.seg button:disabled{cursor:default}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.cchip{border:0;padding:8px 12px;min-height:38px;border-radius:999px;font:inherit;font-size:14px;font-weight:600;cursor:pointer;background:transparent;color:var(--chalk);box-shadow:inset 0 0 0 1px var(--line-2)}
+.cchip.on{background:var(--chalk);color:var(--card);box-shadow:none}
+.prow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;font-size:15px;font-weight:600}
+.prow small{font-weight:400;color:var(--chalk-dim);font-size:13px}
+.mtog{flex-shrink:0;position:relative;width:48px;height:28px;border:0;border-radius:999px;background:var(--line-2);cursor:pointer;padding:0}
+.mtog .oknob{position:absolute;left:3px;top:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .15s}
+.mtog.on{background:#1E6B2A}
+.mtog.on .oknob{left:23px}
+.fta{margin:0;font-size:14px;font-weight:600;color:var(--good-ink)}
+.plinks{display:flex;flex-wrap:wrap;gap:18px;margin-top:14px}
+.linkbtn{border:0;background:none;padding:6px 0;min-height:36px;font:inherit;font-size:14px;font-weight:700;color:var(--chalk);text-decoration:underline;cursor:pointer}
+.linkbtn.danger{color:#B3261E}
+@media (max-width:480px){.ppanel{padding-left:14px}}
 .dscrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;opacity:0;transition:opacity .2s}
 .dscrim.on{opacity:1}
 .drawer{position:fixed;top:0;right:0;bottom:0;width:min(300px,84vw);background:var(--paper);color:var(--ink);z-index:61;
@@ -944,74 +980,78 @@ async function viewPeople() {
   let people = must(await sb.rpc("admin_people")) || [];
   const comms = must(await sb.from("communities").select("id,name").order("name"));
   const reqs = S.me.is_owner ? (must(await sb.rpc("owner_requests")) || []) : [];
-  const list = h("div", { class: "people" });
+  const list = h("div", { class: "plist" });
   const search = h("input", { type: "search", class: "search", placeholder: "Search name or email", oninput: draw });
   const reload = async () => { people = must(await sb.rpc("admin_people")) || []; draw(); };
 
   const act = async (fn, el) => {
     try { await fn(); await reload(); }
-    catch (e) { toast(e.message, true); if (el) el.checked = !el.checked; }
+    catch (e) { toast(e.message, true); if (el) el.checked = !el.checked; draw(); }
   };
+  const opened = new Set();   // rows stay open across reloads
+  const roleOf = p => p.is_owner ? "Owner" : p.is_super_admin ? "Super admin" : p.is_commissioner ? "Commissioner" : (p.communities || []).length ? "Admin" : "No access";
+  const initials = n => String(n || "?").split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(x => x[0].toUpperCase()).join("");
+  async function setRole(p, role) {
+    const sup = role === "Super admin", com = role === "Commissioner";
+    if (!!p.is_super_admin !== sup) must(await sb.rpc("admin_set_super", { uid: p.id, val: sup }));
+    if (!!p.is_commissioner !== com) must(await sb.rpc("admin_set_commissioner", { uid: p.id, val: com }));
+    toast(`${p.display_name} is now ${role === "Admin" ? "a regular admin" : role === "Super admin" ? "a super admin" : "a commissioner"}`);
+  }
+  const mini = (on, label, fn, disabled) => h("button", { type: "button", class: "mtog" + (on ? " on" : ""), role: "switch", "aria-checked": on ? "true" : "false",
+    "aria-label": `${label}: ${on ? "on" : "off"}`, disabled, onclick: fn }, h("span", { class: "oknob" }));
   function card(p) {
-    const me = p.id === S.me.id;
-    const tags = [p.is_owner && "Owner", p.is_super_admin && !p.is_owner && "Super admin", p.is_commissioner && "Commissioner", me && "You"].filter(Boolean);
-    const sup = h("input", { type: "checkbox", checked: p.is_super_admin, disabled: p.is_owner || !S.me.is_owner });
-    const com = h("input", { type: "checkbox", checked: !!p.is_commissioner });
-    com.addEventListener("change", () => act(async () => {
-      must(await sb.rpc("admin_set_commissioner", { uid: p.id, val: com.checked }));
-      toast(com.checked ? `${p.display_name} is now a commissioner` : `${p.display_name} is no longer a commissioner`);
-    }, com));
-    sup.addEventListener("change", () => act(async () => {
-      must(await sb.rpc("admin_set_super", { uid: p.id, val: sup.checked }));
-      toast(sup.checked ? `${p.display_name} is now a super admin` : `${p.display_name} is no longer a super admin`);
-    }, sup));
-    return h("div", { class: "person" },
-      h("div", { class: "phead" },
-        h("div", {}, h("b", {}, p.display_name), h("div", { class: "meta" }, p.email)),
-        tags.length ? h("div", { class: "tags" }, tags.map(t => h("span", { class: "tag" }, t))) : null),
-      h("label", { class: "check" }, sup, h("span", {}, "Super admin"),
-        p.is_owner && h("span", { class: "meta" }, " (the owner stays super admin)")),
-      S.me.is_owner && !p.is_owner && h("label", { class: "check" }, com, h("span", {}, "Commissioner"),
-        h("span", { class: "meta" }, " Runs every community. Free Total Access: every plan and add-on.")),
-      comms.length ? h("div", { class: "commlist" },
-        h("div", { class: "meta" }, "Manages:"),
-        comms.map(c => {
-          const on = (p.communities || []).includes(c.id);
-          const box = h("input", { type: "checkbox", checked: on, disabled: p.is_super_admin });
-          box.addEventListener("change", () => act(async () => {
-            must(await sb.rpc("admin_set_community", { uid: p.id, cid: c.id, val: box.checked }));
-          }, box));
-          return h("label", { class: "check" }, box, h("span", {}, c.name));
-        })) : h("p", { class: "meta" }, "No communities yet."),
-      p.is_super_admin && h("p", { class: "meta" }, "Super admins manage every community."),
-      // Plans. Commissioners get Free Total Access, so both boxes show as included and can't be changed.
-      S.me.is_owner && !p.is_owner && (() => {
-        const free = totalAccess(p);
-        const plan = (on, label, note, rpc, yes, no) => {
-          const box = h("input", { type: "checkbox", checked: free || on, disabled: free });
-          box.addEventListener("change", () => act(async () => {
-            must(await sb.rpc(rpc, { uid: p.id, val: box.checked }));
-            toast(box.checked ? yes : no);
-          }, box));
-          return h("label", { class: "check" }, box, h("span", {}, label), h("span", { class: "meta" }, free ? " Included (Free Total Access)" : note));
-        };
-        return [
-          plan(p.unlimited_communities, "Unlimited communities plan", ` Owns ${p.owned || 0}`, "admin_set_unlimited",
-            `${p.display_name} is on unlimited communities`, `${p.display_name} is back to one community`),
-          plan(p.playoffs_addon, "Playoffs add-on", " Playoff bracket and bowl pick'em in the communities they create", "admin_set_playoffs",
-            `${p.display_name} has the Playoffs add-on`, `${p.display_name} no longer has the Playoffs add-on`)];
-      })(),
-      h("div", { class: "actions" },
-        btn("Send password reset", async () => {
+    const me = p.id === S.me.id, role = roleOf(p), open = opened.has(p.id), owner = S.me.is_owner;
+    const editable = owner && !p.is_owner;
+    const toggleOpen = () => { open ? opened.delete(p.id) : opened.add(p.id); draw(); };
+    const comNames = comms.filter(c => (p.communities || []).includes(c.id)).map(c => c.name);
+    const sub = [p.email, comNames.length === 1 ? comNames[0] : comNames.length ? `${comNames.length} communities` : null].filter(Boolean).join(" · ");
+    const panel = open && h("div", { class: "ppanel" },
+      // Role
+      h("div", { class: "plbl" }, "Role"),
+      p.is_owner ? h("p", { class: "meta", style: "margin:0" }, "Owner. Always a super admin.")
+        : h("div", { class: "seg", role: "radiogroup", "aria-label": "Role" }, ["Admin", "Commissioner", "Super admin"].map(r => {
+            const cur = (role === "No access" ? "Admin" : role) === r;
+            return h("button", { type: "button", role: "radio", "aria-checked": cur ? "true" : "false", class: cur ? "on" : "", disabled: !editable,
+              onclick: () => !cur && act(() => setRole(p, r)) }, r);
+          })),
+      p.is_commissioner && !p.is_owner && h("p", { class: "meta", style: "margin:6px 0 0" }, "Runs every community."),
+      // Communities
+      h("div", { class: "plbl" }, "Communities"),
+      p.is_super_admin ? h("p", { class: "meta", style: "margin:0" }, "Super admins manage every community.")
+        : comms.length ? h("div", { class: "chips" }, comms.map(c => {
+            const on = (p.communities || []).includes(c.id);
+            return h("button", { type: "button", class: "cchip" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false",
+              onclick: () => act(async () => must(await sb.rpc("admin_set_community", { uid: p.id, cid: c.id, val: !on }))) }, on ? "✓ " + c.name : c.name);
+          })) : h("p", { class: "meta", style: "margin:0" }, "No communities yet."),
+      // Plans and add-ons
+      editable && [h("div", { class: "plbl" }, "Plan"),
+        totalAccess(p) ? h("p", { class: "fta" }, "Free Total Access: every plan and add-on")
+          : [h("div", { class: "prow" }, h("span", {}, "Unlimited communities", h("small", {}, ` Owns ${p.owned || 0}`)),
+               mini(!!p.unlimited_communities, "Unlimited communities", () => act(async () => {
+                 must(await sb.rpc("admin_set_unlimited", { uid: p.id, val: !p.unlimited_communities }));
+                 toast(!p.unlimited_communities ? `${p.display_name} is on unlimited communities` : `${p.display_name} is back to one community`); }))),
+             h("div", { class: "prow" }, h("span", {}, "Playoffs add-on", h("small", {}, " Bracket and bowl pick'em")),
+               mini(!!p.playoffs_addon, "Playoffs add-on", () => act(async () => {
+                 must(await sb.rpc("admin_set_playoffs", { uid: p.id, val: !p.playoffs_addon }));
+                 toast(!p.playoffs_addon ? `${p.display_name} has the Playoffs add-on` : `${p.display_name} no longer has the Playoffs add-on`); })))]],
+      // Actions
+      h("div", { class: "plinks" },
+        h("button", { type: "button", class: "linkbtn", onclick: async () => {
           const { error } = await sb.auth.resetPasswordForEmail(p.email, { redirectTo: link("#/") });
           toast(error ? error.message : `Reset email sent to ${p.email}`, !!error);
-        }),
-        !p.is_owner && !me && btn("Remove access", () => act(async () => {
+        } }, "Send password reset"),
+        !p.is_owner && !me && h("button", { type: "button", class: "linkbtn danger", onclick: () => act(async () => {
           if (!await confirmBox("Remove access?", `${p.display_name} keeps their login but loses all admin access. Boards they made stay put.`, "Remove access")) return;
           must(await sb.rpc("admin_remove_person", { uid: p.id }));
-          toast(`${p.display_name} removed`);
-        }), "danger"))
-    );
+          opened.delete(p.id); toast(`${p.display_name} removed`);
+        }) }, "Remove access")));
+    return h("div", { class: "prow2" + (open ? " open" : "") },
+      h("button", { type: "button", class: "phd", "aria-expanded": open ? "true" : "false", onclick: toggleOpen },
+        h("span", { class: "av r-" + role.toLowerCase().replace(/\s+/g, "") }, initials(p.display_name)),
+        h("span", { class: "pnm" }, h("b", {}, p.display_name, me && h("small", {}, " (you)")), h("span", {}, sub)),
+        h("span", { class: "rtag r-" + role.toLowerCase().replace(/\s+/g, "") }, role),
+        h("span", { class: "chev", "aria-hidden": "true" }, "›")),
+      panel);
   }
   function draw() {
     const q = search.value.trim().toLowerCase();
@@ -1024,7 +1064,7 @@ async function viewPeople() {
     reqs.length ? [h("h1", {}, "Admin requests"), h("div", { class: "people" }, reqs.map(reqCard))] : null,
     h("h1", {}, "People"),
     h("p", { class: "sub" }, `${people.length} login${people.length === 1 ? "" : "s"} created. Anyone who signs up shows here with no access until you give them some.`),
-    people.length > 6 ? search : null,
+    people.length > 4 ? search : null,
     list
   );
 }
