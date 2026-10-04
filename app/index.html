@@ -398,6 +398,10 @@ main.wide{max-width:1400px}
 .linkbtn{border:0;background:none;padding:6px 0;min-height:36px;font:inherit;font-size:14px;font-weight:700;color:var(--chalk);text-decoration:underline;cursor:pointer}
 .linkbtn.danger{color:#B3261E}
 @media (max-width:480px){.ppanel{padding-left:14px}}
+.ptag{margin-left:8px;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:#F2B61D;color:#1D1D1D;vertical-align:middle}
+.practice{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:10px 0 14px;padding:12px 14px;border-radius:12px;
+  background:repeating-linear-gradient(135deg,rgba(242,182,29,.16) 0 12px,rgba(242,182,29,.08) 12px 24px);box-shadow:inset 0 0 0 1px rgba(242,182,29,.6)}
+.practice span{color:var(--chalk-dim)}
 .dscrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;opacity:0;transition:opacity .2s}
 .dscrim.on{opacity:1}
 .drawer{position:fixed;top:0;right:0;bottom:0;width:min(300px,84vw);background:var(--paper);color:var(--ink);z-index:61;
@@ -881,7 +885,8 @@ async function editName(required = false) {
 async function signOut() { await sb.auth.signOut(); await loadMe(); go("#/login"); }
 
 async function viewHome() {
-  const all = must(await sb.from("communities").select("id,name").order("name"));
+  // Practice Field first, then the rest A to Z
+  const all = must(await sb.from("communities").select("id,name,is_practice").order("is_practice", { ascending: false }).order("name"));
   const list = isSuper() || isComm() ? all : all.filter(c => S.admin.has(c.id));
   const mine = poolsShown() ? (must(await sb.rpc("my_pools")) || []) : [];
   const isPlayerOnly = !list.length && mine.length;
@@ -900,7 +905,7 @@ async function viewHome() {
     (isSuper() || isComm()) && h("div", { class: "actions" }, btn("New community", newCommunity, "primary"),
       isSuper() && h("a", { class: "btn", href: "#/people" }, waiting ? `People (${waiting})` : "People")),
     isPlayerOnly ? null : list.length
-      ? h("ul", { class: "list" }, list.map(c => h("li", {}, h("a", { href: "#/c/" + c.id }, c.name),
+      ? h("ul", { class: "list" }, list.map(c => h("li", {}, h("a", { href: "#/c/" + c.id }, c.name, c.is_practice && h("span", { class: "ptag" }, "Practice")),
           isSuper() && btn("Rename", () => renameCommunity(c)))))
       : h("p", { class: "empty" }, isSuper()
           ? "Create a community to start adding board sets."
@@ -1305,7 +1310,15 @@ async function viewCommunity(id, tab = "") {
         iconBtn("edit", "Rename community", () => renameCommunity(c)),
         tab === "" && iconBtn("plus", "New game week", () => newWeek(id, weeksForForm), "solid"),
         tab === "pools" && playoffs && iconBtn("plus", "New pool", () => newPool(id), "solid"),
-        tab === "vote" && iconBtn("plus", "New vote", () => newVote(c), "solid")))
+        tab === "vote" && iconBtn("plus", "New vote", () => newVote(c), "solid"))),
+    // Practice community: sample boards for every scoring style; safe to try anything, reset any time
+    c.is_practice && h("div", { class: "practice" },
+      h("div", {}, h("b", {}, "Practice area. "),
+        h("span", {}, "Try anything here. Nothing touches real boards or ESPN. Add someone on the Admins tab to let them practice too.")),
+      isSuper() && btn("Reset practice", async () => {
+        if (!await confirmBox("Reset the practice area?", "Every week, game day, board and vote here is deleted and the sample boards come back. People you added stay.", "Reset", "danger")) return;
+        try { must(await sb.rpc("reset_practice", { cid: c.id })); route(); toast("Practice area reset"); } catch (e) { toast(e.message, true); }
+      }, "danger"))
   ];
   let weeksForForm = [];
   const body = [];
