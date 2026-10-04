@@ -290,12 +290,19 @@ main.wide{max-width:1400px}
 .leader li:first-child .rk{color:var(--gold-ink)}
 .leader .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .leader .pt{font:800 22px/1 var(--display);font-variant-numeric:tabular-nums}
-.shots{display:grid;gap:26px;margin-top:10px}
-.shots figure{margin:0}
-.shots figcaption{font-weight:700;margin:0 0 8px}
-.shots figcaption span{display:block;font-weight:400;font-size:14px;color:var(--chalk-dim)}
-.shots img{display:block;width:100%;height:auto;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.45)}
-.shots .phone img{max-width:430px}
+.feat{margin:0 0 12px;padding:0 14px;border-radius:14px;background:var(--card);box-shadow:var(--card-edge)}
+.feat summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;cursor:pointer;list-style:none}
+.feat summary::-webkit-details-marker{display:none}
+.feat summary::before{content:"\203A";font-size:24px;font-weight:700;color:var(--chalk-dim);transition:transform .15s;margin-right:-4px}
+.feat[open] summary::before{transform:rotate(90deg)}
+.feat .ftxt{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.feat .ftxt b{font-size:17px}
+.feat .ftxt span{font-size:13px;color:var(--chalk-dim)}
+.fblurb{margin:0 0 10px;font-size:14px;color:var(--chalk-dim)}
+.fstrip{display:flex;gap:10px;overflow-x:auto;padding:0 0 14px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+.fshot{flex:0 0 auto;display:flex;flex-direction:column;gap:6px;scroll-snap-align:start;text-decoration:none;color:var(--chalk)}
+.fshot img{display:block;height:240px;width:auto;max-width:none;border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,.25);background:#fff}
+.fshot span{font-size:13px;font-weight:600;max-width:200px}
 .stand{width:100%;border-collapse:collapse;font-size:15px}
 .stand th{text-align:left;font-size:13px;color:var(--chalk-dim);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line-2)}
 .stand td{padding:9px 8px;border-bottom:1px solid var(--line)}
@@ -363,6 +370,9 @@ main.wide{max-width:1400px}
 .helptop a{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:999px;font-size:15px;font-weight:700;
   text-decoration:none;color:var(--chalk);background:var(--btn);box-shadow:var(--btn-edge)}
 .drawer .dlabel{padding:4px 14px 8px;font-size:13px;font-weight:700;color:#6B6B6B;text-transform:uppercase;letter-spacing:.4px}
+.drawer .ditem.dtog{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.drawer .dpill{flex-shrink:0;min-width:44px;padding:5px 10px;border-radius:999px;background:#E2DACF;color:#1F1915;font-size:13px;font-weight:700;text-align:center}
+.drawer .dpill.on{background:#1E6B2A;color:#fff}
 .drawer hr{border:0;border-top:1px solid rgba(0,0,0,.14);margin:6px 0 12px}
 .drawer .iconbtn{color:var(--ink);background:transparent;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
 @media (prefers-reduced-motion:reduce){.dscrim,.drawer{transition:none}}
@@ -645,7 +655,9 @@ function openDrawer(title, items) {
   const d = h("nav", { class: "drawer", "aria-label": title },
     h("div", { class: "dhead" }, h("b", {}, title), iconBtn("close", "Close menu", close)),
     items.filter(Boolean).filter((x, i, a) => x !== "-" || (i > 0 && i < a.length - 1 && a[i - 1] !== "-")).map(x => x === "-" ? h("hr") : x.heading ? h("div", { class: "dlabel" }, x.heading) :
-      h("button", { type: "button", class: "ditem " + (x.cls || ""), onclick: () => { close(); x.fn(); } }, x.label)));
+      h("button", { type: "button", class: "ditem " + (x.cls || "") + (x.toggle != null ? " dtog" : ""), onclick: () => { close(); x.fn(); },
+        ...(x.toggle != null ? { role: "switch", "aria-checked": x.toggle ? "true" : "false" } : {}) },
+        x.label, x.toggle != null && h("span", { class: "dpill" + (x.toggle ? " on" : "") }, x.toggle ? "On" : "Off"))));
   document.body.append(sc, d);
   addEventListener("keydown", onKey);
   requestAnimationFrame(() => { sc.classList.add("on"); d.classList.add("on"); d.querySelector(".ditem")?.focus(); });
@@ -1784,6 +1796,11 @@ function boardBlock(b, mg, ctx) {
         S.me?.is_owner && { label: "Audit log", fn: () => downloadAudit(b) },
         ...(ctx?.dayMenu || []),
         "-", { label: "Help and guides", fn: () => go("#/help") },
+        ...(S.me?.is_owner ? ["-", { heading: "Owner controls" },
+          { label: "Bracket pools", toggle: !!S.poolsOn, fn: togglePools },
+          { label: "Vote pages", toggle: !!S.votesOn, fn: toggleVotes },
+          { label: "Commissioner unlock", toggle: !!S.commUnlock, fn: toggleCommUnlock },
+          { label: "What's coming", fn: () => go("#/preview") }] : []),
         mg && !b.locked && "-",
         mg && !b.locked && { label: "Delete board", fn: () => deleteBoard(b), cls: "danger" }
       ]), "solid barmenu")),
@@ -2155,26 +2172,35 @@ document.fonts?.ready.then(() => document.querySelectorAll(".bracket").forEach(b
 
 // Board Master only: pictures of the pools to show people before they're turned on.
 // The images live in the app's preview folder on GitHub.
-const PREVIEWS = [
-  ["6-vote-pick-games-phone.png", "Vote page: players pick games", "Anyone with the link taps up to 3 games they want boards for. College Football lists every game with a Top 25 team.", true],
-  ["7-vote-three-picks-phone.png", "Vote page: three picks, live counts", "Counts update live. Players can change picks until voting closes.", true],
-  ["8-vote-results-phone.png", "Vote page: results for admins", "Ranked by votes. Make board fills in the teams, colors and game day.", true],
-  ["1-playoff-bracket-make-picks.png", "Playoff bracket: making picks", "Players tap the winner of each game. Later rounds fill in from their picks."],
-  ["2-playoff-bracket-results-leaderboard.png", "Playoff bracket: results and leaderboard", "Right picks in green, wrong ones struck out. Top 10 on the right."],
-  ["3-playoff-bracket-phone.png", "Playoff bracket on a phone", "", true],
-  ["4-bowl-pickem.png", "Bowl pick'em", "Every non-playoff bowl. 1 point per right pick. Each game locks at its own kickoff."],
-  ["5-bowl-pickem-phone.png", "Bowl pick'em on a phone", "", true]
+// What's coming: one card per feature. Add a feature by adding an entry; screenshots live in app/preview/.
+const FEATURES = [
+  { name: "Vote pages", on: () => S.votesOn, toggle: () => toggleVotes(),
+    blurb: "Players vote on which games get boards. Up to 3 picks each, live counts, then one tap makes the board.",
+    shots: [["6-vote-pick-games-phone.png", "Players pick games"], ["7-vote-three-picks-phone.png", "Three picks, live counts"],
+            ["8-vote-results-phone.png", "Results and Make board"]] },
+  { name: "Bracket pools", on: () => S.poolsOn, toggle: () => togglePools(),
+    blurb: "Playoff bracket and bowl pick'em pools with a leaderboard. Each game locks at its own kickoff.",
+    shots: [["1-playoff-bracket-make-picks.png", "Making bracket picks"], ["2-playoff-bracket-results-leaderboard.png", "Results and leaderboard"],
+            ["3-playoff-bracket-phone.png", "Bracket on a phone"], ["4-bowl-pickem.png", "Bowl pick'em"], ["5-bowl-pickem-phone.png", "Pick'em on a phone"]] }
 ];
 function viewPreview() {
   if (!S.me?.is_owner) throw new Error("Page not found.");
   render(
     h("div", { class: "crumbs" }, h("a", { href: "#/" }, "Home")),
     h("h1", {}, "What's coming"),
-    h("p", { class: "sub" }, "Vote pages and bracket pools, shown with sample players. Tap a picture to open it full size."),
-    h("div", { class: "shots" }, PREVIEWS.map(([file, title, note, phone]) => h("figure", { class: phone ? "phone" : "" },
-      h("figcaption", {}, title, note && h("span", {}, note)),
-      h("a", { href: "preview/" + file, target: "_blank", rel: "noopener" },
-        h("img", { src: "preview/" + file, alt: title, loading: "lazy" })))))
+    h("p", { class: "sub" }, "Features you can turn on when you're ready. Screens use sample data. Tap one to see it full size."),
+    FEATURES.map((f, i) => {
+      const on = !!f.on();
+      return h("details", { class: "feat", open: i === 0 },
+        h("summary", {},
+          h("span", { class: "ftxt" }, h("b", {}, f.name), h("span", {}, `${f.shots.length} screens · ${on ? "on for everyone" : "only you see it"}`)),
+          h("button", { type: "button", class: "otog" + (on ? " on" : ""), role: "switch", "aria-checked": on ? "true" : "false",
+            "aria-label": `${f.name}: ${on ? "on" : "off"}`, onclick: e => { e.preventDefault(); f.toggle(); } },
+            h("span", { class: "otxt" }, on ? "On" : "Off"), h("span", { class: "oknob" }))),
+        h("p", { class: "fblurb" }, f.blurb),
+        h("div", { class: "fstrip" }, f.shots.map(([file, cap]) => h("a", { class: "fshot", href: "preview/" + file, target: "_blank", rel: "noopener" },
+          h("img", { src: "preview/" + file, alt: cap, loading: "lazy" }), h("span", {}, cap)))));
+    })
   );
 }
 
