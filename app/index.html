@@ -318,6 +318,9 @@ main.wide{max-width:1400px}
 .drawer .ditem:hover,.drawer .ditem:focus-visible{background:rgba(0,0,0,.06)}
 .drawer .ditem.primary{background:#F2B61D;color:#1D1D1D}
 .drawer .ditem.danger{color:#B3261E}
+.helpfoot{margin:36px 0 8px;text-align:center}
+.helpfoot a{display:inline-flex;align-items:center;gap:6px;font-weight:600;color:var(--chalk-dim)}
+.drawer .dlabel{padding:4px 14px 8px;font-size:13px;font-weight:700;color:#6B6B6B;text-transform:uppercase;letter-spacing:.4px}
 .drawer hr{border:0;border-top:1px solid rgba(0,0,0,.14);margin:6px 0 12px}
 .drawer .iconbtn{color:var(--ink);background:transparent;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
 @media (prefers-reduced-motion:reduce){.dscrim,.drawer{transition:none}}
@@ -579,6 +582,7 @@ const ICONS = {
   squares: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   pools: '<path d="M3 5h5v5H3"/><path d="M3 14h5v5H3"/><path d="M8 7.5h4v9H8"/><path d="M12 12h9"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  help: '<circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.5-2.7 4.3"/><path d="M12 17.6h.01"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   admins: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M18 14.8c1.8.7 3 2.4 3.5 5.2"/>'
 };
@@ -595,7 +599,7 @@ function openDrawer(title, items) {
   const sc = h("div", { class: "dscrim", onclick: close });
   const d = h("nav", { class: "drawer", "aria-label": title },
     h("div", { class: "dhead" }, h("b", {}, title), iconBtn("close", "Close menu", close)),
-    items.filter(Boolean).filter((x, i, a) => x !== "-" || (i > 0 && i < a.length - 1 && a[i - 1] !== "-")).map(x => x === "-" ? h("hr") :
+    items.filter(Boolean).filter((x, i, a) => x !== "-" || (i > 0 && i < a.length - 1 && a[i - 1] !== "-")).map(x => x === "-" ? h("hr") : x.heading ? h("div", { class: "dlabel" }, x.heading) :
       h("button", { type: "button", class: "ditem " + (x.cls || ""), onclick: () => { close(); x.fn(); } }, x.label)));
   document.body.append(sc, d);
   addEventListener("keydown", onKey);
@@ -625,7 +629,8 @@ function topbar() {
   );
 }
 function render(...nodes) {
-  $app.replaceChildren(topbar(), h("main", { class: "wrap" }, ...nodes));
+  $app.replaceChildren(topbar(), h("main", { class: "wrap" }, ...nodes,
+    location.hash !== "#/help" && h("p", { class: "helpfoot" }, h("a", { href: "#/help" }, icon("help", 18), "Help and guides"))));
   requestAnimationFrame(fitBoards);
 }
 function fitBoards() {
@@ -650,6 +655,7 @@ async function route() {
     if (key === "w" && id) return await viewWeek(id);
     if (key === "p" && id) return await viewPool(id);
     if (key === "j" && id) return await joinFromLink(id);
+    if (key === "help") return viewHelp();
     if (key === "login" || !S.session) return viewLogin();
     if (key === "c" && id) return await viewCommunity(id, sub);
     if (key === "people") return await viewPeople();
@@ -662,6 +668,36 @@ async function route() {
   }
 }
 addEventListener("hashchange", route);
+
+/* ---------- Help ----------
+   Each role sees its own guide plus every guide below it. The owner and Super admins see all of them.
+   The same text is in the PDF guides (app/guides/), so the two always match. */
+const GUIDES = [{"id": "player", "title": "Player Guide", "who": "For anyone who plays on a board", "intro": "Game Town Square runs squares boards for games. Boards use points, not money.", "sections": [{"h": "Open a board", "k": "p", "items": ["The person running the board sends you a link. It can open one board, a game day, or a whole week.", "You don't need a login to look at a board."]}, {"h": "Read the board", "k": "list", "items": ["The top team runs across the top. The side team runs down the left side.", "Each square has a number from 1 to 100 in the corner and the owner's name.", "When the board locks, the numbers 0 to 9 are drawn across the top and down the side.", "The right column shows the points paid for each quarter and the final."]}, {"h": "How a square wins", "k": "steps", "items": ["At the end of each quarter, take the last digit of each team's score.", "Find the top team's digit across the top and the side team's digit down the side.", "The square where they meet wins that quarter's points.", "Men's college basketball pays Half and Final only."]}, {"h": "Get a square", "k": "list", "items": ["Ask the person running the board. They put your name in the square.", "The board locks 15 minutes before kickoff. After that, names and numbers can't change.", "Squares nobody took at lock time are marked Plug."]}, {"h": "Scores", "k": "list", "items": ["Scores update on their own from ESPN during the game. A Live tag shows while the game is on.", "If the score looks behind, tap the menu button (three lines) and choose Update score."]}, {"h": "Save or share the board", "k": "steps", "items": ["Tap the menu button (three lines) next to the board.", "Choose Save image, Share image, or Copy link."]}]}, {"id": "helper", "title": "Helper Guide", "who": "For people helping on one board", "intro": "A helper fills in one board for the admin. You can't change any other board.", "sections": [{"h": "Get set up", "k": "steps", "items": ["Create a login on Game Town Square.", "Send the admin the email you used. They add you as a helper on their board.", "Sign in and open the board link they send you."]}, {"h": "Fill in names", "k": "steps", "items": ["Tap a square.", "Type the person's name and tap Save name.", "To clear a square, erase the name and tap Save name."]}, {"h": "Draw numbers", "k": "list", "items": ["Tap a number box across the top or down the side and enter 0 to 9.", "Or leave them blank. Numbers are drawn on their own when the board locks."]}, {"h": "Scores", "k": "list", "items": ["Tap the menu button (three lines) and choose Scores.", "Type each team's score, or choose Pull from ESPN.", "Typing scores turns ESPN off for that board until you pull from ESPN again."]}, {"h": "Lock the board", "k": "list", "items": ["Tap the menu button and choose Lock board. Locking draws any blank numbers.", "If you don't lock it, the board locks itself 15 minutes before kickoff.", "After it locks, nothing can change. Only the Board Master can unlock it, or a Commissioner when the Board Master allows it."]}, {"h": "What helpers can't do", "k": "list", "items": ["Change board details like teams, colors, or points.", "Move or delete the board.", "Touch any other board."]}]}, {"id": "admin", "title": "Community Admin Guide", "who": "For people who run a community", "intro": "Community admins set up the weeks, game days, and boards for their community.", "sections": [{"h": "Get access", "k": "steps", "items": ["Create a login on Game Town Square.", "On the home screen, tap Request admin access.", "Pick the community and add a note about who you are.", "A Commissioner approves it. The next time you open the app, a message shows what you can now do."]}, {"h": "How it's organized", "k": "p", "items": ["Community, then game week, then game day, then board.", "A game day holds the boards for one date, like Saturday Oct 10th."]}, {"h": "Create a game week", "k": "steps", "items": ["Open your community and tap the + button.", "Pick the league and season.", "College Football and NFL: pick the week from the list. The weeks match ESPN, and the week page shows its dates.", "Basketball, baseball, hockey, and soccer: pick the game date instead."]}, {"h": "Create a game day", "k": "steps", "items": ["Open the week and tap New board set.", "Pick the game day. Only dates inside that week are allowed. The name fills in, like Saturday Oct 10th.", "You can change the name if you want."]}, {"h": "Add a board", "k": "steps", "items": ["On the week page, tap Add board under the game day. On a board, you can also use the menu button and choose Add board.", "Enter the sport, the top team, the side team, and their colors.", "Enter the kickoff line, points per square, the points for each quarter and the final, and the bottom note."]}, {"h": "Fill names and numbers", "k": "list", "items": ["Tap a square to enter or clear a name.", "Tap a number box to enter a drawn number, 0 to 9.", "You can add helpers to fill in a board for you: menu button, then Helpers, then Add helper. They need a login first."]}, {"h": "Locking", "k": "list", "items": ["When the game is found on ESPN, its kickoff time is saved. The board locks itself 15 minutes before kickoff.", "At lock, blank numbers are drawn and empty squares are marked Plug.", "To lock early: menu button, then Lock board. Lock open boards locks every open board in that game day or week.", "Locked boards can't be edited or deleted. Only the Board Master can unlock, or a Commissioner when the Board Master allows it."]}, {"h": "Scores", "k": "list", "items": ["Scores pull from ESPN on their own when the team names match ESPN.", "To type scores, use the menu button and choose Scores."]}, {"h": "The board menu", "k": "list", "items": ["Save image, Share image, Copy link.", "Scores, Edit details, Lock board, Move board, Move up and Move down, Helpers.", "The game day's buttons: Add board, Lock open boards, Copy set link, Rename set, Move to week.", "Delete board, at the bottom. Open boards only."]}, {"h": "Share with players", "k": "list", "items": ["Copy week link sends the whole week.", "Copy set link sends one game day.", "Copy link in a board's menu sends one board."]}]}, {"id": "commissioner", "title": "Commissioner Guide", "who": "For Commissioners", "intro": "Commissioners run every community and approve new admins. Everything in the Community Admin Guide applies to you too.", "sections": [{"h": "What you can do", "k": "list", "items": ["Run weeks, game days, and boards in every community.", "Approve or deny admin requests.", "Create new communities.", "Add and remove community admins.", "Unlock boards when the Board Master turns that on."]}, {"h": "Approve admin requests", "k": "steps", "items": ["When someone asks to join a community, Admin requests shows at the top of your home screen.", "Each request shows who's asking, which community, and their note.", "Tap Approve or Deny. Approved admins get a message the next time they open the app."]}, {"h": "Create a community", "k": "steps", "items": ["On the home screen, tap New community.", "Enter the name. You're added as its admin."]}, {"h": "Manage admins", "k": "steps", "items": ["Open the community and go to the Admins tab.", "Tap Add admin and enter their login email. They need a login first.", "Tap Remove to take someone off. You can't remove other Commissioners."]}, {"h": "Unlock a board", "k": "list", "items": ["This only works after the Board Master turns on Commissioner unlock.", "Open the board, tap the menu button, and choose Unlock. You'll enter your password again.", "The board shows that you unlocked it."]}, {"h": "What you can't do", "k": "list", "items": ["Delete communities.", "Delete locked boards.", "Remove other Commissioners."]}]}];
+function guidesForMe() {
+  if (S.me?.is_owner || isSuper()) return GUIDES;
+  const ids = ["player"];
+  if (S.helper?.size || S.admin?.size || isComm()) ids.push("helper");
+  if (S.admin?.size || isComm()) ids.push("admin");
+  if (isComm()) ids.push("commissioner");
+  return GUIDES.filter(g => ids.includes(g.id));
+}
+function viewHelp() {
+  const list = guidesForMe().slice().reverse();   // their own role first
+  const body = g => [
+    h("p", { class: "sub", style: "margin:4px 0 10px" }, g.intro),
+    g.sections.map(x => [h("h3", { style: "margin:16px 0 6px" }, x.h),
+      x.k === "p" ? x.items.map(t => h("p", { style: "margin:0 0 8px" }, t))
+        : h(x.k === "steps" ? "ol" : "ul", { style: "margin:0;padding-left:22px;line-height:1.5" }, x.items.map(t => h("li", {}, t)))]),
+    h("div", { class: "actions", style: "margin-top:16px" },
+      h("a", { class: "btn", href: `guides/game-town-square-${g.id}-guide.pdf`, download: "" }, "Download PDF"))];
+  render(
+    h("h1", {}, "Help"),
+    list.length > 1 && h("p", { class: "sub" }, S.me?.is_owner ? "Every guide, so you can send each person theirs." : "Your guide is first. Tap a guide to open it."),
+    list.map((g, i) => h("details", { class: "panel", style: "margin:0 0 12px", open: i === 0 },
+      h("summary", { style: "cursor:pointer;font-weight:700;font-size:18px" }, g.title, h("span", { class: "meta", style: "font-weight:400" }, ` · ${g.who}`)),
+      body(g)))
+  );
+}
 
 /* ---------- Views ---------- */
 function viewSetup() {
@@ -1447,15 +1483,25 @@ async function viewSet(id) {
   );
 }
 
+// Game-day items for the board's ☰ menu, so phones get the same set buttons as the game-day page
+function setMenu(set, wk) {
+  const open = (set.boards || []).filter(x => !x.locked).map(x => x.id);
+  return ["-", { heading: set.name },
+    { label: "Add board", fn: () => addBoard({ ...set, weeks: wk }, (set.boards || []).length) },
+    open.length && { label: "Lock open boards", fn: () => lockAll(open) },
+    { label: "Copy set link", fn: () => copy(link("#/s/" + set.id)) },
+    { label: "Rename set", fn: () => renameSet({ ...set, weeks: wk }) },
+    { label: "Move to week", fn: () => moveSet(set) }];
+}
 async function viewBoard(id) {
-  const b = must(await sb.from("boards").select("*, board_sets(id,name,community_id,week_id)").eq("id", id).maybeSingle());
+  const b = must(await sb.from("boards").select("*, board_sets(id,name,game_date,community_id,week_id,boards(id,locked))").eq("id", id).maybeSingle());
   if (!b) throw new Error("Board not found. Check the link.");
   const mg = canManage(b.board_sets.community_id);
   const wk = must(await sb.from("weeks").select("*").eq("id", b.board_sets.week_id).maybeSingle());
   const owner = mg || (S.me && b.managed_by === S.me.id);
   render(
     h("div", { class: "crumbs" }, h("a", { href: "#/s/" + b.board_sets.id }, b.board_sets.name)),
-    boardBlock(b, mg, { ...(wk || {}), community_id: b.board_sets.community_id, siblings: 1 }),
+    boardBlock(b, mg, { ...(wk || {}), community_id: b.board_sets.community_id, siblings: 1, dayMenu: mg ? setMenu(b.board_sets, wk) : [] }),
     owner ? await helpersPanel(b) : null
   );
 }
@@ -1668,6 +1714,8 @@ function boardBlock(b, mg, ctx) {
         mg && !b.locked && ctx?.siblings > 1 && { label: "Move down", fn: () => reorderBoard(b, 1, ctx) },
         owner && { label: "Helpers", fn: () => go("#/b/" + b.id) },
         S.me?.is_owner && { label: "Audit log", fn: () => downloadAudit(b) },
+        ...(ctx?.dayMenu || []),
+        "-", { label: "Help and guides", fn: () => go("#/help") },
         mg && !b.locked && "-",
         mg && !b.locked && { label: "Delete board", fn: () => deleteBoard(b), cls: "danger" }
       ]), "solid barmenu")),
