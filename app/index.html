@@ -17,8 +17,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Kalam:wght@400;700&family=Saira+Extra+Condensed:wght@800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js" integrity="sha384-iLddHTLokph6Omwoyid4XKxHaWa6w41BnoEj0q5oOrzmYPpHIKt1wyjReA7s//pP" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
 <style>
 :root{
   --table:#2B211B; --table-2:#33271F; --chalk:#F2EEE9; --chalk-dim:#BDB3A8;
@@ -305,6 +305,47 @@ main.wide{max-width:1400px}
 /* ---------- Modal & toast ---------- */
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:50;padding:12px}
 @media (min-width:640px){.scrim{align-items:center}}
+.vband{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-radius:12px;background:var(--hero);color:#F2EEE9;font-size:14px;font-weight:600;margin:4px 0 12px}
+.vband .wk{font-size:13px;font-weight:700;padding:3px 10px;border-radius:999px;background:#F2B61D;color:#1D1D1D;white-space:nowrap}
+.vlist{display:grid;gap:10px}
+@media (min-width:700px){.vlist{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.vcard{display:flex;flex-direction:column;gap:10px;width:100%;padding:14px;border:0;border-radius:14px;background:var(--card);box-shadow:var(--card-edge);color:var(--chalk);font:inherit;text-align:left;cursor:pointer}
+.vcard.on{box-shadow:inset 0 0 0 2px var(--chalk)}
+.vcard.dim{opacity:.55}
+.vcard:disabled{cursor:default}
+.vtop{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.vtxt{display:flex;flex-direction:column;gap:3px;min-width:0}
+.vtxt b{font-size:17px}
+.vtxt span{font-size:13px;color:var(--chalk-dim)}
+.vtxt .made{color:var(--good-ink);font-weight:600}
+.vcheck{flex-shrink:0;width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;box-shadow:inset 0 0 0 2px var(--line-2);color:transparent}
+.vcard.on .vcheck{background:#F2B61D;color:#1D1D1D;box-shadow:none}
+.vbar{display:flex;align-items:center;gap:10px}
+.vtrack{flex:1;height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.vtrack i{display:block;height:8px;border-radius:4px;background:var(--chalk-dim)}
+.vcard.on .vtrack i{background:#F2B61D}
+.vn{font-size:13px;font-weight:700;min-width:62px;text-align:right}
+.vsave{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:14px;padding:12px;border-radius:14px;background:var(--savebar);box-shadow:var(--card-edge)}
+.vsave .btn{width:100%;min-height:50px;font-size:17px}
+.vres{display:flex;align-items:center;gap:12px}
+.vres .vtxt{flex:1}
+.vrank{flex-shrink:0;width:34px;height:34px;border-radius:10px;background:var(--chip);display:flex;align-items:center;justify-content:center;font-weight:800}
+.vrank.gold{background:#F2B61D;color:#1D1D1D}
+.owner{margin:4px 0 22px;padding:4px 14px;border-radius:14px;background:var(--card);box-shadow:var(--card-edge)}
+.ohead{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.ohead b{font-size:15px}
+.ohead a{font-size:14px;font-weight:700;color:var(--chalk)}
+.ocrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0}
+.ocrow + .ocrow{border-top:1px solid var(--line)}
+.octxt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.octxt b{font-size:16px}
+.octxt span{font-size:13px;color:var(--chalk-dim)}
+.otog{flex-shrink:0;position:relative;width:76px;height:36px;border:0;border-radius:999px;background:var(--line-2);color:var(--chalk);cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;line-height:1;padding:0}
+.otog .otxt{position:absolute;right:12px;top:50%;transform:translateY(-50%)}
+.otog .oknob{position:absolute;left:4px;top:4px;width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .15s}
+.otog.on{background:#1E6B2A;color:#fff}
+.otog.on .otxt{right:auto;left:12px}
+.otog.on .oknob{left:44px}
 .dscrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;opacity:0;transition:opacity .2s}
 .dscrim.on{opacity:1}
 .drawer{position:fixed;top:0;right:0;bottom:0;width:min(300px,84vw);background:var(--paper);color:var(--ink);z-index:61;
@@ -399,7 +440,8 @@ const canManage = cid => !!S.me && (isSuper() || isComm() || S.admin.has(cid));
 // and unlocks boards there once the Board Master turns that on.
 const isCommish = cid => isComm();
 const canUnlock = cid => !!S.me?.is_owner || (S.commUnlock && isCommish(cid));
-const poolsShown = () => S.poolsOn || !!S.me?.is_owner;   // the owner sees pools before they're turned on
+const poolsShown = () => S.poolsOn || !!S.me?.is_owner;
+const votesShown = () => S.votesOn || !!S.me?.is_owner;   // vote pages: the owner sees them before they're turned on   // the owner sees pools before they're turned on
 function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
 function textOn(hex) {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
@@ -463,10 +505,11 @@ const confirmBox = (title, text, ok, okClass = "danger") => modal({ title, text,
 /* ---------- Auth state ---------- */
 async function loadMe() {
   // Bracket pools switch (the owner turns it on for everyone)
-  const sw = await sb.from("app_settings").select("key,value").in("key", ["pools_enabled", "commissioner_unlock"]);
+  const sw = await sb.from("app_settings").select("key,value").in("key", ["pools_enabled", "commissioner_unlock", "votes_enabled"]);
   const setting = k => (sw.data || []).find(r => r.key === k)?.value === true;
   S.poolsOn = setting("pools_enabled");
   S.commUnlock = setting("commissioner_unlock");
+  S.votesOn = setting("votes_enabled");
   S.session = must(await sb.auth.getSession()).session;
   S.me = null; S.admin = new Set();
   if (!S.session) return;
@@ -583,6 +626,7 @@ const ICONS = {
   squares: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   pools: '<path d="M3 5h5v5H3"/><path d="M3 14h5v5H3"/><path d="M8 7.5h4v9H8"/><path d="M12 12h9"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  vote: '<rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V5h8v6"/><path d="M10 8l1.5 1.5L14 7"/>',
   help: '<circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.5-2.7 4.3"/><path d="M12 17.6h.01"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   admins: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M18 14.8c1.8.7 3 2.4 3.5 5.2"/>'
@@ -658,6 +702,7 @@ async function route() {
     if (key === "p" && id) return await viewPool(id);
     if (key === "j" && id) return await joinFromLink(id);
     if (key === "help") return viewHelp();
+    if (key === "v" && id) return await viewVote(id);
     if (key === "login" || !S.session) return viewLogin();
     if (key === "c" && id) return await viewCommunity(id, sub);
     if (key === "people") return await viewPeople();
@@ -781,17 +826,7 @@ async function viewHome() {
   const myReq = S.me && !isSuper() && !isComm() ? must(await sb.from("access_requests").select("id,kind,new_name,status,community_id,created_at")
     .eq("user_id", S.me.id).order("created_at", { ascending: false }).limit(1).maybeSingle()) : null;
   render(
-    S.me?.is_owner && h("div", { class: "switch" },
-      h("div", {}, h("b", {}, `Bracket pools are ${S.poolsOn ? "on" : "off"}. `),
-        h("span", { class: "meta" }, S.poolsOn ? "Admins and players can see them." : "Only you can see them.")),
-      h("div", { class: "actions", style: "margin:0" },
-        h("a", { class: "btn", href: "#/preview" }, "What's coming"),
-        btn(S.poolsOn ? "Turn off" : "Turn on for everyone", togglePools, S.poolsOn ? "danger" : "primary"))),
-    S.me?.is_owner && h("div", { class: "switch" },
-      h("div", {}, h("b", {}, `Commissioner unlock is ${S.commUnlock ? "on" : "off"}. `),
-        h("span", { class: "meta" }, S.commUnlock ? "Commissioners can unlock boards in their communities." : "Only you can unlock boards.")),
-      h("div", { class: "actions", style: "margin:0" },
-        btn(S.commUnlock ? "Turn off" : "Turn on", toggleCommUnlock, S.commUnlock ? "danger" : "primary"))),
+    S.me?.is_owner && ownerControls(),
     mine.length ? [h("h1", {}, "My pools"),
       h("ul", { class: "list" }, mine.map(p => h("li", {},
         h("div", {}, h("a", { href: "#/p/" + p.pool_id }, p.name),
@@ -1102,7 +1137,7 @@ async function viewCommunity(id, tab = "") {
   const c = must(await sb.from("communities").select("*").eq("id", id).maybeSingle());
   if (!c) throw new Error("Community not found.");
   if (!canManage(id)) throw new Error("You aren't an admin on this community.");
-  const tabs = [["", "Squares", "squares"], poolsShown() && ["pools", "Pools", "pools"], (isSuper() || isCommish(id)) && ["admins", "Admins", "admins"]].filter(Boolean);
+  const tabs = [["", "Squares", "squares"], votesShown() && ["vote", "Vote", "vote"], poolsShown() && ["pools", "Pools", "pools"], (isSuper() || isCommish(id)) && ["admins", "Admins", "admins"]].filter(Boolean);
   if (!tabs.some(t => t[0] === tab)) tab = "";
 
   const head = [
@@ -1112,10 +1147,22 @@ async function viewCommunity(id, tab = "") {
       h("div", { class: "btns" },
         iconBtn("edit", "Rename community", () => renameCommunity(c)),
         tab === "" && iconBtn("plus", "New game week", () => newWeek(id, weeksForForm), "solid"),
-        tab === "pools" && iconBtn("plus", "New pool", () => newPool(id), "solid")))
+        tab === "pools" && iconBtn("plus", "New pool", () => newPool(id), "solid"),
+        tab === "vote" && iconBtn("plus", "New vote", () => newVote(c), "solid")))
   ];
   let weeksForForm = [];
   const body = [];
+
+  if (tab === "vote") {
+    const polls = must(await sb.from("polls").select("id,league,season,label,games,closes_at,closed,created_at").eq("community_id", id).order("created_at", { ascending: false }));
+    if (!S.votesOn) body.push(h("p", { class: "meta" }, "Hidden. Only you can see votes until you turn vote pages on from the home screen."));
+    body.push(polls.length
+      ? h("div", { class: "people" }, polls.map(p => h("a", { class: "person", href: "#/v/" + p.id, style: "text-decoration:none;color:inherit;display:block" },
+          h("div", { class: "phead" }, h("b", {}, `${p.league} ${p.label}`),
+            h("span", { class: "chip" + (voteOpen(p) ? " open" : "") }, voteOpen(p) ? "Open" : "Closed")),
+          h("div", { class: "meta" }, `${countOf((p.games || []).length, "game")} · ${voteOpen(p) && p.closes_at ? "closes " + lockTime(p.closes_at) : "created " + lockTime(p.created_at)}`))))
+      : h("p", { class: "empty" }, "No votes yet. Tap + to let players pick which games get boards."));
+  }
 
   if (tab === "") {
     const weeks = must(await sb.from("weeks")
@@ -1223,7 +1270,7 @@ async function weekForm(title, ok, current, weeks) {
     fields: [
       { name: "league", label: "League", list: "league-list", value: current?.league || "", placeholder: "NFL, NBA, MLB, or type one", required: true, maxlength: 40 },
       { name: "season", label: "Season", type: "number", inputmode: "numeric", value: current?.season ?? currentSeason(), min: 2000, max: 2100, half: true },
-      { name: "label", label: "Week", list: "week-list", value: current && !String(current.sort_key).match(/^\d{8}$/) ? current.label : "", placeholder: "Week 1", maxlength: 40, half: true },
+      { name: "label", label: "Week", list: "week-list", value: current && !String(current.sort_key).match(/^\d{8}$/) ? current.label : "", placeholder: "Pick a week", maxlength: 40, half: true },
       { name: "date", label: "Game date", type: "date", value: curDate }
     ],
     after: inputs => {
@@ -1234,6 +1281,23 @@ async function weekForm(title, ok, current, weeks) {
         show(inputs.season, !byDate); show(inputs.label, !byDate); show(inputs.date, byDate);
       };
       inputs.league.addEventListener("input", sync); sync();
+      // New football week: pre-fill the current week from ESPN (the next one once this week's games are done)
+      if (!current) {
+        let auto = "", ask = 0;
+        const fill = async () => {
+          const L = leagueFor(inputs.league.value), n = ++ask;
+          if (L?.mode !== "week" || (inputs.label.value && inputs.label.value !== auto)) return;
+          try {
+            const { data } = await sb.functions.invoke("pull-scores", { body: { week_on: { league: L.name, season: Number(inputs.season.value) || currentSeason(), date: today } } });
+            if (n !== ask || !data?.label || (inputs.label.value && inputs.label.value !== auto)) return;
+            auto = inputs.label.value = data.label;
+          } catch { /* leave it blank; they can pick from the list */ }
+        };
+        inputs.league.addEventListener("input", fill);
+        inputs.league.addEventListener("change", fill);
+        inputs.season.addEventListener("change", fill);
+        fill();
+      }
     } });
   if (!v) return null;
   const L = leagueFor(v.league);
@@ -1859,13 +1923,15 @@ function cleanDetails(v, league) {
     kickoff: v.kickoff.trim(), price: num(v.price), q1: num(v.q1), q2: num(v.q2), q3: num(v.q3), final: num(v.final), footer: v.footer.trim() };
 }
 
-async function addBoard(set, count) {
+async function addBoard(set, count, pre = {}, onDone = null) {
   teamDatalist(); setList("sport-list", SPORTS);
   const sport = leagueFor(set.weeks?.league)?.sport ?? "";
-  const v = await modal({ title: "Add board", fields: detailFields({ sport }, set.weeks?.league), ok: "Add board", after: wireTeams });
+  const v = await modal({ title: "Add board", fields: detailFields({ sport, ...pre }, set.weeks?.league), ok: "Add board", after: wireTeams });
   if (!v) return;
-  try { must(await sb.from("boards").insert({ set_id: set.id, sort_order: count, ...cleanDetails(v, set.weeks?.league) })); route(); }
-  catch (e) { toast(e.message, true); }
+  try {
+    const row = must(await sb.from("boards").insert({ set_id: set.id, sort_order: count, ...cleanDetails(v, set.weeks?.league) }).select().single());
+    onDone ? await onDone(row) : route();
+  } catch (e) { toast(e.message, true); }
 }
 
 async function editDetails(b, refresh, league) {
@@ -1929,7 +1995,8 @@ async function downloadAudit(b) {
   try {
     const rows = must(await sb.from("board_audit").select("at,actor_name,action,detail,board_label").eq("board_id", b.id).order("at").order("id"));
     if (!rows.length) return toast("No changes logged for this board.");
-    const cell = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const cell = v => { let t = String(v ?? ""); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;   // spreadsheet formula guard
+      return `"${t.replace(/"/g, '""')}"`; };
     const csv = [["Time (Central)", "Who", "What", "Details", "Board"],
       ...rows.map(r => [lockTime(r.at), r.actor_name, r.action, r.detail, r.board_label])].map(r => r.map(cell).join(",")).join("\r\n");
     const a = h("a", { href: URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv" })),
@@ -2089,6 +2156,9 @@ document.fonts?.ready.then(() => document.querySelectorAll(".bracket").forEach(b
 // Board Master only: pictures of the pools to show people before they're turned on.
 // The images live in the app's preview folder on GitHub.
 const PREVIEWS = [
+  ["6-vote-pick-games-phone.png", "Vote page: players pick games", "Anyone with the link taps up to 3 games they want boards for. College Football lists every game with a Top 25 team.", true],
+  ["7-vote-three-picks-phone.png", "Vote page: three picks, live counts", "Counts update live. Players can change picks until voting closes.", true],
+  ["8-vote-results-phone.png", "Vote page: results for admins", "Ranked by votes. Make board fills in the teams, colors and game day.", true],
   ["1-playoff-bracket-make-picks.png", "Playoff bracket: making picks", "Players tap the winner of each game. Later rounds fill in from their picks."],
   ["2-playoff-bracket-results-leaderboard.png", "Playoff bracket: results and leaderboard", "Right picks in green, wrong ones struck out. Top 10 on the right."],
   ["3-playoff-bracket-phone.png", "Playoff bracket on a phone", "", true],
@@ -2099,8 +2169,8 @@ function viewPreview() {
   if (!S.me?.is_owner) throw new Error("Page not found.");
   render(
     h("div", { class: "crumbs" }, h("a", { href: "#/" }, "Home")),
-    h("h1", {}, "Coming soon: bracket pools"),
-    h("p", { class: "sub" }, "Sample players and last season's real games. Tap a picture to open it full size."),
+    h("h1", {}, "What's coming"),
+    h("p", { class: "sub" }, "Vote pages and bracket pools, shown with sample players. Tap a picture to open it full size."),
     h("div", { class: "shots" }, PREVIEWS.map(([file, title, note, phone]) => h("figure", { class: phone ? "phone" : "" },
       h("figcaption", {}, title, note && h("span", {}, note)),
       h("a", { href: "preview/" + file, target: "_blank", rel: "noopener" },
@@ -2117,6 +2187,187 @@ async function toggleCommUnlock() {
   try {
     must(await sb.from("app_settings").update({ value: on, updated_at: new Date().toISOString() }).eq("key", "commissioner_unlock"));
     await loadMe(); route(); toast(on ? "Commissioner unlock is on" : "Commissioner unlock is off");
+  } catch (e) { toast(e.message, true); }
+}
+
+/* ---------- Vote pages ----------
+   An admin opens a vote on a week's games (from ESPN). Anyone with the link picks up to 3 games
+   they want boards for; counts update live. Admins see the results and turn a game into a board. */
+const voteOpen = p => !p.closed && (!p.closes_at || Date.parse(p.closes_at) > Date.now());
+const etDate = iso => new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+const tbaTime = iso => /T04:00(:00)?(\.000)?Z$/.test(String(iso || ""));          // ESPN's "time not set yet"
+const gameName = g => `${g.top_rank ? "#" + g.top_rank + " " : ""}${g.top} at ${g.side_rank ? "#" + g.side_rank + " " : ""}${g.side}`;
+function gameWhen(g) {
+  if (!g.kickoff) return "Time TBA";
+  const d = new Date(g.kickoff);
+  const day = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" });
+  const time = tbaTime(g.kickoff) ? "time TBA" : d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ, timeZoneName: "short" });
+  return [day, time, g.tv].filter(Boolean).join(" · ");
+}
+function voterKey() {
+  try {
+    let k = localStorage.getItem("gts_voter");
+    if (!k) { k = crypto.randomUUID(); localStorage.setItem("gts_voter", k); }
+    return k;
+  } catch { return S.voterKey || (S.voterKey = crypto.randomUUID()); }
+}
+
+async function newVote(c) {
+  const weeks = must(await sb.from("weeks").select("league,season,created_at").eq("community_id", c.id).order("created_at", { ascending: false }).limit(1));
+  const own = weeks[0]?.league && ESPN_LEAGUES.includes(weeks[0].league) ? weeks[0].league : "";
+  const any = S.me?.is_owner || isSuper() || !own || !!must(await sb.rpc("community_unlimited", { cid: c.id }));
+  let league = own;
+  if (any) {
+    const v = await modal({ title: "New vote", text: "Pick the sport players will vote on.",
+      fields: [{ name: "league", label: "Sport", value: own || "College Football", options: ESPN_LEAGUES.map(x => ({ value: x, label: x })) }], ok: "Next" });
+    if (!v) return;
+    league = v.league;
+  }
+  const L = leagueFor(league);
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  let suggested = "";
+  if (L.mode === "week") try {
+    const { data } = await sb.functions.invoke("pull-scores", { body: { week_on: { league, season: currentSeason(), date: today } } });
+    suggested = data?.label || "";
+  } catch { /* they can pick */ }
+  if (L.mode === "week") setList("vote-weeks", L.weeks);
+  const v = await modal({ title: `New ${league} vote`,
+    text: league === "College Football" ? "Every game with at least one Top 25 team goes on the ballot. Anyone with the link can pick up to 3." : "Every game goes on the ballot. Anyone with the link can pick up to 3.",
+    fields: [
+      L.mode === "week"
+        ? { name: "label", label: "Week", value: suggested, list: "vote-weeks", placeholder: "Pick a week", half: true }
+        : { name: "date", label: "Game date", type: "date", value: today, half: true },
+      { name: "season", label: "Season", type: "number", value: currentSeason(), half: true },
+      { name: "closes", label: "Voting closes (blank: first kickoff)", type: "datetime-local", value: "" }
+    ], ok: "Create vote" });
+  if (!v) return;
+  const label = L.mode === "week" ? (L.weeks.find(x => x.toLowerCase() === String(v.label).trim().toLowerCase()) || "") : dateParts(v.date).label;
+  if (L.mode === "week" && !label) return toast("Pick a week from the list.", true);
+  const season = L.mode === "week" ? (Number(v.season) || currentSeason()) : (L.crossYear && dateParts(v.date).m < 8 ? dateParts(v.date).y - 1 : dateParts(v.date).y);
+  try {
+    const { data, error } = await sb.functions.invoke("pull-scores", { body: { poll_games: { league, season, label, date: L.mode === "date" ? String(dateParts(v.date).key) : "" } } });
+    if (error) throw new Error("Couldn't reach ESPN. Try again in a minute.");
+    const games = data?.games || [];
+    if (!games.length) return toast(`No ${league === "College Football" ? "Top 25 " : ""}games found for ${label}.`, true);
+    // Closes at the chosen time, or the first kickoff (a game with no time yet counts as 11 AM Eastern)
+    const kick = g => tbaTime(g.kickoff) ? Date.parse(etDate(g.kickoff) + "T15:00:00Z") : Date.parse(g.kickoff);
+    const closes = v.closes ? new Date(v.closes).toISOString() : new Date(Math.min(...games.map(kick))).toISOString();
+    const row = must(await sb.from("polls").insert({ community_id: c.id, league, season, label, games, closes_at: closes }).select().single());
+    go("#/v/" + row.id);
+  } catch (e) { toast(e.message, true); }
+}
+
+let VOTE_TIMER = null;
+async function viewVote(id) {
+  clearInterval(VOTE_TIMER);
+  const p = must(await sb.from("polls").select("*, communities(name)").eq("id", id).maybeSingle());
+  if (!p) throw new Error("This vote isn't available. Check the link.");
+  const mg = canManage(p.community_id), me = voterKey(), open = voteOpen(p);
+  let tally = must(await sb.rpc("poll_tally", { pid: id, me })) || { counts: {}, voters: 0, mine: [] };
+  let picks = [...(tally.mine || [])], saved = [...picks];
+  const L = leagueFor(p.league);
+  const title = L?.mode === "week" ? `Pick ${p.label}'s boards` : `Pick the boards for ${p.label}`;
+  const box = h("div");
+  const draw = () => {
+    const counts = tally.counts || {}, max = Math.max(1, ...p.games.map(g => counts[g.id] || 0));
+    const changed = picks.slice().sort().join() !== saved.slice().sort().join();
+    const card = g => {
+      const on = picks.includes(g.id), full = !on && picks.length >= 3, n = counts[g.id] || 0;
+      return h("button", { type: "button", class: "vcard" + (on ? " on" : "") + (full || !open ? " dim" : ""), "aria-pressed": on ? "true" : "false", disabled: !open,
+        onclick: () => { if (on) picks = picks.filter(x => x !== g.id); else if (picks.length < 3) picks.push(g.id); else return toast("You can pick up to 3. Tap one to unpick it first."); draw(); } },
+        h("span", { class: "vtop" }, h("span", { class: "vtxt" }, h("b", {}, gameName(g)), h("span", {}, gameWhen(g))), h("span", { class: "vcheck" }, on ? "✓" : "")),
+        h("span", { class: "vbar" }, h("span", { class: "vtrack" }, h("i", { style: `width:${Math.round(n / max * 100)}%` })), h("span", { class: "vn" }, countOf(n, "vote"))));
+    };
+    const ranked = p.games.slice().sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0));
+    box.replaceChildren(...[
+      h("div", { class: "vband" }, h("span", {}, open ? (p.closes_at ? `Closes ${lockTime(p.closes_at)}` : "Voting is open") : "Voting is closed"),
+        open && h("span", { class: "wk" }, `${picks.length} of 3 picked`)),
+      h("div", { class: "vlist" }, p.games.map(card)),
+      h("p", { class: "meta", style: "text-align:center" }, `${tally.voters === 1 ? "1 person" : `${tally.voters || 0} people`} voted. ${p.league === "College Football" ? "Every game with at least one Top 25 team. " : ""}Counts update live.`),
+      open && h("div", { class: "vsave" },
+        btn(changed || !saved.length ? "Save my picks" : "Picks saved", async () => {
+          try { tally = must(await sb.rpc("cast_vote", { pid: id, me, picks })); saved = [...picks]; toast("Picks saved"); draw(); }
+          catch (e) { toast(e.message, true); }
+        }, "primary"),
+        h("span", { class: "meta" }, "You can change your picks until voting closes.")),
+      mg && [h("h2", { style: "margin:28px 0 8px" }, "Results"),
+        h("div", { class: "actions" },
+          btn("Copy vote link", () => copy(link("#/v/" + id))),
+          open ? btn("Close voting", async () => { try { must(await sb.from("polls").update({ closed: true }).eq("id", id)); route(); } catch (e) { toast(e.message, true); } })
+               : btn("Reopen voting", async () => { try { must(await sb.from("polls").update({ closed: false, closes_at: null }).eq("id", id)); route(); } catch (e) { toast(e.message, true); } }),
+          btn("Delete vote", async () => {
+            if (!await confirmBox("Delete this vote?", "The votes are deleted too. Boards you already made stay.", "Delete", "danger")) return;
+            try { must(await sb.from("polls").delete().eq("id", id)); go("#/c/" + p.community_id + "/vote"); } catch (e) { toast(e.message, true); }
+          }, "danger")),
+        h("div", { class: "people" }, ranked.map((g, i) => h("div", { class: "person vres" },
+          h("span", { class: "vrank" + (i === 0 && (counts[g.id] || 0) ? " gold" : "") }, String(i + 1)),
+          h("div", { class: "vtxt" }, h("b", {}, gameName(g)),
+            g.board_id ? h("span", { class: "made" }, "Board made") : h("span", {}, `${countOf(counts[g.id] || 0, "vote")} · ${gameWhen(g)}`)),
+          g.board_id ? h("a", { class: "btn", href: "#/b/" + g.board_id }, "Open board") : btn("Make board", () => boardFromVote(p, g), "primary"))))]
+    ].flat(Infinity).filter(x => x !== false && x != null));
+  };
+  draw();
+  render(
+    mg && h("div", { class: "crumbs" }, h("a", { href: "#/c/" + p.community_id + "/vote" }, p.communities?.name || "Community")),
+    h("p", { class: "sub", style: "margin:0" }, `${p.communities?.name || ""} · ${p.league}`),
+    h("h1", {}, title),
+    open && h("p", { class: "sub" }, "Tap up to 3 games you want squares boards for."),
+    !S.votesOn && mg && h("p", { class: "meta" }, "Hidden. Only you can see this vote until vote pages are turned on."),
+    box
+  );
+  // Live counts while the vote is on screen; picks you haven't saved stay as they are
+  if (open) VOTE_TIMER = setInterval(async () => {
+    if (location.hash !== "#/v/" + id) return clearInterval(VOTE_TIMER);
+    if (document.hidden) return;
+    try { const t = must(await sb.rpc("poll_tally", { pid: id, me })); if (t) { tally = { ...t, mine: tally.mine }; draw(); } } catch { /* try again next round */ }
+  }, 20000);
+}
+
+// Turn a voted game into a board: finds or creates its week and game day, then opens Add board with the teams filled in
+async function boardFromVote(p, g) {
+  try {
+    const L = leagueFor(p.league), day = etDate(g.kickoff);
+    let label = p.label, season = p.season, sortKey;
+    if (L.mode === "week") sortKey = L.weeks.indexOf(label) + 1;
+    else { const d = dateParts(day); label = d.label; sortKey = d.key; season = L.crossYear && d.m < 8 ? d.y - 1 : d.y; }
+    let w = must(await sb.from("weeks").select("*").eq("community_id", p.community_id).eq("league", p.league).eq("season", season).eq("label", label).maybeSingle());
+    if (!w) w = must(await sb.from("weeks").insert({ community_id: p.community_id, league: p.league, season, label, sort_key: sortKey }).select().single());
+    let set = must(await sb.from("board_sets").select("id,name,game_date,community_id,week_id,boards(id)").eq("week_id", w.id).eq("game_date", day).maybeSingle());
+    if (!set) set = { ...must(await sb.from("board_sets").insert({ community_id: p.community_id, week_id: w.id, name: gameDayName(day), game_date: day }).select().single()), boards: [] };
+    const kickLine = tbaTime(g.kickoff) ? (g.tv ? `On ${g.tv}` : "") :
+      `${new Date(g.kickoff).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ }).replace(":00", "")} kickoff${g.tv ? " on " + g.tv : ""}`;
+    await addBoard({ ...set, weeks: w }, (set.boards || []).length,
+      { top_team: g.top, side_team: g.side, top_color: g.top_color || undefined, side_color: g.side_color || undefined, kickoff: kickLine },
+      async row => {
+        const games = p.games.map(x => x.id === g.id ? { ...x, board_id: row.id } : x);
+        try { must(await sb.from("polls").update({ games }).eq("id", p.id)); } catch { /* the board is made either way */ }
+        go("#/b/" + row.id);
+      });
+  } catch (e) { toast(e.message, true); }
+}
+
+// Owner controls: one card, one row per switch. Each toggle still asks before it changes anything.
+function ownerControls() {
+  const row = (name, on, onText, offText, fn) => h("div", { class: "ocrow" },
+    h("div", { class: "octxt" }, h("b", {}, name), h("span", {}, on ? onText : offText)),
+    h("button", { type: "button", class: "otog" + (on ? " on" : ""), role: "switch", "aria-checked": on ? "true" : "false",
+      "aria-label": `${name}: ${on ? "on" : "off"}`, onclick: fn }, h("span", { class: "otxt" }, on ? "On" : "Off"), h("span", { class: "oknob" })));
+  return h("section", { class: "owner", "aria-label": "Owner controls" },
+    h("div", { class: "ohead" }, h("b", {}, "Owner controls"), h("a", { href: "#/preview" }, "What's coming")),
+    row("Bracket pools", S.poolsOn, "Admins and players see them.", "Hidden. Only you see them.", togglePools),
+    row("Vote pages", S.votesOn, "Admins can open votes. Anyone with the link can vote.", "Hidden. Only you see them.", toggleVotes),
+    row("Commissioner unlock", S.commUnlock, "Commissioners can unlock boards.", "Only you can unlock boards.", toggleCommUnlock));
+}
+
+async function toggleVotes() {
+  const on = !S.votesOn;
+  if (!await confirmBox(on ? "Turn on vote pages?" : "Turn off vote pages?",
+    on ? "Admins will see a Vote tab in their communities, and vote links will work for everyone."
+       : "Votes and vote links will be hidden from everyone but you.",
+    on ? "Turn on" : "Turn off", on ? "primary" : "danger")) return;
+  try {
+    must(await sb.from("app_settings").update({ value: on, updated_at: new Date().toISOString() }).eq("key", "votes_enabled"));
+    await loadMe(); route(); toast(on ? "Vote pages are on" : "Vote pages are off");
   } catch (e) { toast(e.message, true); }
 }
 
