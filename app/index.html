@@ -355,6 +355,15 @@ main.wide{max-width:1400px}
 .otog.on .oknob{left:44px}
 .plist{display:flex;flex-direction:column;border-radius:14px;background:var(--card);box-shadow:var(--card-edge);overflow:hidden}
 .prow2 + .prow2{border-top:1px solid var(--line)}
+.pbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 10px}
+.pgroups{display:flex;flex-direction:column;gap:14px}
+.psh{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 6px}
+.pst{display:flex;align-items:center;gap:8px;border:0;background:none;padding:6px 0;min-height:36px;font:inherit;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--chalk-dim);cursor:pointer}
+.pst small{font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--chip);color:var(--chalk);letter-spacing:0}
+.pst .chev{font-size:18px}
+.pst .chev.down{transform:rotate(90deg)}
+.psa{display:flex;gap:14px}
+.cchip.add{box-shadow:inset 0 0 0 1px var(--line-2);border:1px dashed transparent;color:var(--chalk-dim)}
 .phd{display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;border:0;background:none;color:var(--chalk);font:inherit;text-align:left;cursor:pointer;min-height:60px}
 .av{flex-shrink:0;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;background:var(--chip);color:var(--chalk)}
 .av.r-owner,.av.r-commissioner{background:#F2B61D;color:#1D1D1D}
@@ -980,9 +989,19 @@ async function viewPeople() {
   let people = must(await sb.rpc("admin_people")) || [];
   const comms = must(await sb.from("communities").select("id,name").order("name"));
   const reqs = S.me.is_owner ? (must(await sb.rpc("owner_requests")) || []) : [];
-  const list = h("div", { class: "plist" });
+  const list = h("div", { class: "pgroups" });
   const search = h("input", { type: "search", class: "search", placeholder: "Search name or email", oninput: draw });
-  const reload = async () => { people = must(await sb.rpc("admin_people")) || []; draw(); };
+  let groups = [], members = [];
+  const loadGroups = async () => {
+    groups = must(await sb.from("people_groups").select("id,name").order("name")) || [];
+    members = must(await sb.from("people_group_members").select("group_id,user_id")) || [];
+  };
+  await loadGroups();
+  const reload = async () => { people = must(await sb.rpc("admin_people")) || []; await loadGroups(); draw(); };
+  // Group by: role, community, or named groups. Remembered on this device.
+  let groupBy = "role";
+  try { groupBy = localStorage.getItem("gts_people_group") || "role"; } catch { /* default */ }
+  const shut = new Set();   // collapsed group sections
 
   const act = async (fn, el) => {
     try { await fn(); await reload(); }
@@ -1023,6 +1042,18 @@ async function viewPeople() {
             return h("button", { type: "button", class: "cchip" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false",
               onclick: () => act(async () => must(await sb.rpc("admin_set_community", { uid: p.id, cid: c.id, val: !on }))) }, on ? "✓ " + c.name : c.name);
           })) : h("p", { class: "meta", style: "margin:0" }, "No communities yet."),
+      // Named groups
+      h("div", { class: "plbl" }, "Groups"),
+      h("div", { class: "chips" },
+        groups.map(g => {
+          const on = members.some(m => m.group_id === g.id && m.user_id === p.id);
+          return h("button", { type: "button", class: "cchip" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false",
+            onclick: () => act(async () => {
+              if (on) must(await sb.from("people_group_members").delete().eq("group_id", g.id).eq("user_id", p.id));
+              else must(await sb.from("people_group_members").insert({ group_id: g.id, user_id: p.id }));
+            }) }, on ? "✓ " + g.name : g.name);
+        }),
+        h("button", { type: "button", class: "cchip add", onclick: () => newGroup(p) }, "+ New group")),
       // Plans and add-ons
       editable && [h("div", { class: "plbl" }, "Plan"),
         totalAccess(p) ? h("p", { class: "fta" }, "Free Total Access: every plan and add-on")
@@ -1053,10 +1084,66 @@ async function viewPeople() {
         h("span", { class: "chev", "aria-hidden": "true" }, "›")),
       panel);
   }
+  async function newGroup(p) {
+    const v = await modal({ title: "New group", fields: [{ name: "name", label: "Group name", required: true, maxlength: 40, placeholder: "Like Family or Tailgate crew" }], ok: "Create group" });
+    if (!v || !v.name.trim()) return;
+    act(async () => {
+      const g = must(await sb.from("people_groups").insert({ name: v.name.trim() }).select().single());
+      if (p) must(await sb.from("people_group_members").insert({ group_id: g.id, user_id: p.id }));
+      toast(`Group "${g.name}" created`);
+    });
+  }
+  async function renameGroup(g) {
+    const v = await modal({ title: "Rename group", fields: [{ name: "name", label: "Group name", value: g.name, required: true, maxlength: 40 }], ok: "Save" });
+    if (!v || !v.name.trim()) return;
+    act(async () => must(await sb.from("people_groups").update({ name: v.name.trim() }).eq("id", g.id)));
+  }
+  async function deleteGroup(g) {
+    if (!await confirmBox(`Delete "${g.name}"?`, "Only the group goes away. Nobody loses access.", "Delete group", "danger")) return;
+    act(async () => must(await sb.from("people_groups").delete().eq("id", g.id)));
+  }
+  function sections(rows) {
+    const inSet = ids => rows.filter(p => ids.includes(p.id));
+    if (groupBy === "community") {
+      const out = comms.map(c => ({ key: "c" + c.id, name: c.name, rows: rows.filter(p => (p.communities || []).includes(c.id)) }));
+      out.push({ key: "c-none", name: "No community", rows: rows.filter(p => !(p.communities || []).length && !p.is_super_admin) });
+      out.push({ key: "c-all", name: "Super admins (every community)", rows: rows.filter(p => p.is_super_admin) });
+      return out;
+    }
+    if (groupBy === "groups") {
+      const out = groups.map(g => ({ key: "g" + g.id, name: g.name, group: g,
+        rows: inSet(members.filter(m => m.group_id === g.id).map(m => m.user_id)) }));
+      out.push({ key: "g-none", name: "Not in a group", rows: rows.filter(p => !members.some(m => m.user_id === p.id)) });
+      return out;
+    }
+    const order = ["Owner", "Super admin", "Commissioner", "Admin", "No access"];
+    const names = { "Owner": "Owner", "Super admin": "Super admins", "Commissioner": "Commissioners", "Admin": "Admins", "No access": "No access" };
+    return order.map(r => ({ key: "r" + r, name: names[r], rows: rows.filter(p => roleOf(p) === r) }));
+  }
+  const picker = h("div", { class: "seg gby", role: "radiogroup", "aria-label": "Group by" });
   function draw() {
+    picker.replaceChildren(...[["role", "Role"], ["community", "Community"], ["groups", "My groups"]].map(([k, label]) =>
+      h("button", { type: "button", role: "radio", "aria-checked": groupBy === k ? "true" : "false", class: groupBy === k ? "on" : "",
+        onclick: () => { groupBy = k; try { localStorage.setItem("gts_people_group", k); } catch { /* fine */ } draw(); } }, label)));
     const q = search.value.trim().toLowerCase();
     const rows = people.filter(p => !q || `${p.display_name} ${p.email}`.toLowerCase().includes(q));
-    list.replaceChildren(...(rows.length ? rows.map(card) : [h("p", { class: "empty" }, "Nobody matches that.")]));
+    if (!rows.length) return list.replaceChildren(h("p", { class: "empty" }, "Nobody matches that."));
+    const secs = sections(rows).filter(x => x.rows.length || (x.group && !q));
+    list.replaceChildren(
+      ...secs.map(x => {
+        const closed = shut.has(x.key);
+        return h("section", { class: "psec" },
+          h("div", { class: "psh" },
+            h("button", { type: "button", class: "pst", "aria-expanded": closed ? "false" : "true",
+              onclick: () => { closed ? shut.delete(x.key) : shut.add(x.key); draw(); } },
+              h("span", { class: "chev" + (closed ? "" : " down"), "aria-hidden": "true" }, "›"), x.name, h("small", {}, String(x.rows.length))),
+            x.group && h("span", { class: "psa" },
+              h("button", { type: "button", class: "linkbtn", onclick: () => renameGroup(x.group) }, "Rename"),
+              h("button", { type: "button", class: "linkbtn danger", onclick: () => deleteGroup(x.group) }, "Delete"))),
+          !closed && (x.rows.length ? h("div", { class: "plist" }, x.rows.map(card))
+            : h("p", { class: "meta", style: "margin:0 0 6px" }, "Nobody yet. Open a person and tap this group to add them.")));
+      }),
+      groupBy === "groups" && h("div", { class: "actions" }, btn("New group", () => newGroup(null), "primary")));
   }
   draw();
   render(
@@ -1064,6 +1151,7 @@ async function viewPeople() {
     reqs.length ? [h("h1", {}, "Admin requests"), h("div", { class: "people" }, reqs.map(reqCard))] : null,
     h("h1", {}, "People"),
     h("p", { class: "sub" }, `${people.length} login${people.length === 1 ? "" : "s"} created. Anyone who signs up shows here with no access until you give them some.`),
+    h("div", { class: "pbar" }, h("span", { class: "meta" }, "Group by"), picker),
     people.length > 4 ? search : null,
     list
   );
