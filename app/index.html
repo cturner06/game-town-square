@@ -66,6 +66,8 @@ button,input{font:inherit}
 .whoname{background:none;border:0;color:inherit;font:inherit;padding:4px 0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;text-decoration:underline dotted;text-underline-offset:3px}
 .sheettop{display:flex;justify-content:space-between;gap:12px;font:700 15px/1.2 var(--ui);color:#444;margin-bottom:-18px}
 .sheettop .stamps{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font:600 13px/1.25 var(--ui);color:#666;text-align:right}
+.bar .barmenu{margin-left:auto}
+.lockstamp + .barmenu{margin-left:0}
 .lockstamp{margin-left:auto;font-size:14px;font-weight:700;color:var(--chalk-dim);white-space:nowrap}
 .who .btn{white-space:nowrap;flex-shrink:0}
 .wrap{max-width:1040px;margin:0 auto;padding:18px 16px 60px}
@@ -299,6 +301,22 @@ main.wide{max-width:1400px}
 /* ---------- Modal & toast ---------- */
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:50;padding:12px}
 @media (min-width:640px){.scrim{align-items:center}}
+.dscrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;opacity:0;transition:opacity .2s}
+.dscrim.on{opacity:1}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(300px,84vw);background:var(--paper);color:var(--ink);z-index:61;
+  display:flex;flex-direction:column;padding:calc(14px + env(safe-area-inset-top,0px)) 14px calc(14px + env(safe-area-inset-bottom,0px));
+  transform:translateX(100%);transition:transform .22s ease-out;box-shadow:-8px 0 24px rgba(0,0,0,.2);overflow-y:auto}
+.drawer.on{transform:none}
+.drawer .dhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.drawer .dhead b{font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drawer .ditem{display:block;width:100%;text-align:left;min-height:48px;padding:12px 14px;margin:0 0 6px;border:0;border-radius:10px;
+  background:transparent;color:var(--ink);font-family:inherit;font-size:17px;font-weight:600;line-height:1.2;cursor:pointer}
+.drawer .ditem:hover,.drawer .ditem:focus-visible{background:rgba(0,0,0,.06)}
+.drawer .ditem.primary{background:#F2B61D;color:#1D1D1D}
+.drawer .ditem.danger{color:#B3261E}
+.drawer hr{border:0;border-top:1px solid rgba(0,0,0,.14);margin:6px 0 12px}
+.drawer .iconbtn{color:var(--ink);background:transparent;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+@media (prefers-reduced-motion:reduce){.dscrim,.drawer{transition:none}}
 .modal{width:100%;max-width:460px;max-height:90vh;overflow:auto;background:var(--paper);color:var(--ink);border-radius:12px;padding:18px}
 .modal h3{margin:0 0 6px;font:700 20px var(--ui)}
 .modal p{margin:0 0 12px;color:var(--muted)}
@@ -367,10 +385,11 @@ const lockTime = t => {
 const boardName = b => [b.top_team, b.side_team].filter(Boolean).join(" vs ") || "Untitled board";
 const link = hash => location.origin + location.pathname + hash;
 const isSuper = () => !!(S.me && S.me.is_super_admin);
-const canManage = cid => !!S.me && (isSuper() || S.admin.has(cid));
+const isComm = () => !!S.me?.is_commissioner;   // Commissioners run every community
+const canManage = cid => !!S.me && (isSuper() || isComm() || S.admin.has(cid));
 // Commissioner: runs the communities they're assigned to, manages those admin lists,
 // and unlocks boards there once the Board Master turns that on.
-const isCommish = cid => !!S.me?.is_commissioner && S.admin.has(cid);
+const isCommish = cid => isComm();
 const canUnlock = cid => !!S.me?.is_owner || (S.commUnlock && isCommish(cid));
 const poolsShown = () => S.poolsOn || !!S.me?.is_owner;   // the owner sees pools before they're turned on
 function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
@@ -450,6 +469,91 @@ async function loadMe() {
   ca.forEach(r => S.admin.add(r.community_id));
   const ba = must(await sb.from("board_admins").select("board_id").eq("user_id", uid));
   S.helper = new Set((ba || []).map(r => r.board_id));
+  checkRoles().catch(e => console.error(e));
+}
+
+/* ---------- Role announcements ----------
+   When the Board Master changes someone's role, they see what they can now do the next time
+   they open the app. What they've already been told is saved on their profile, so it shows once. */
+// Live check while the app is open: when they come back to the app, every minute while it's
+// on screen, and when they move between pages (at most every 15 seconds). If their role
+// changed, the page redraws with the new access and the announcement shows right away.
+let _roleCheckAt = 0;
+async function refreshRoles(force) {
+  if (!S.me?.id || S.noticeOpen || document.hidden) return;
+  if (!force && Date.now() - _roleCheckAt < 15000) return;
+  _roleCheckAt = Date.now();
+  try {
+    const [{ data: p }, { data: ca }] = await Promise.all([
+      sb.from("profiles").select("is_commissioner,is_super_admin,unlimited_communities").eq("id", S.me.id).maybeSingle(),
+      sb.from("community_admins").select("community_id").eq("user_id", S.me.id)]);
+    if (!p || !ca) return;
+    const admin = new Set(ca.map(r => r.community_id));
+    const changed = !!p.is_commissioner !== !!S.me.is_commissioner || !!p.is_super_admin !== !!S.me.is_super_admin ||
+      !!p.unlimited_communities !== !!S.me.unlimited_communities ||
+      admin.size !== S.admin.size || [...admin].some(x => !S.admin.has(x));
+    if (!changed) return;
+    Object.assign(S.me, p); S.admin = admin;
+    route();
+    await checkRoles();
+  } catch (e) { console.error(e); }
+}
+addEventListener("visibilitychange", () => { if (!document.hidden) refreshRoles(true); });
+addEventListener("focus", () => refreshRoles(true));
+addEventListener("hashchange", () => refreshRoles(false));
+setInterval(() => refreshRoles(true), 60000);
+
+function roleSnapshot() {
+  return { c: !!S.me.is_commissioner, s: !!S.me.is_super_admin, u: !!S.me.unlimited_communities, a: [...S.admin].sort() };
+}
+async function checkRoles() {
+  if (!S.me?.id || S.noticeOpen) return;
+  const now = roleSnapshot(), was = S.me.roles_seen;
+  const same = was && was.c === now.c && was.s === now.s && was.u === now.u && JSON.stringify([...(was.a || [])].sort()) === JSON.stringify(now.a);
+  if (same) return;
+  // First visit after this feature went in, or the owner: just remember where things stand
+  if (!was || S.me.is_owner) { await sb.rpc("ack_roles", { r: now }); S.me.roles_seen = now; return; }
+  const added = now.a.filter(x => !(was.a || []).includes(x)), dropped = (was.a || []).filter(x => !now.a.includes(x));
+  const ids = [...added, ...dropped];
+  const names = new Map(ids.length ? (must(await sb.from("communities").select("id,name").in("id", ids)) || []).map(c => [c.id, c.name]) : []);
+  const nm = x => names.get(x) || "a community";
+  const parts = [];
+  if (now.c && !was.c) parts.push({ head: "You're now a Commissioner", items: [
+    "Run weeks, game days, and boards in every community.",
+    "Create new communities.",
+    "Add and remove community admins (not Commissioners or Super admins).",
+    "Edit locked boards.",
+    S.commUnlock ? "Unlock boards." : "Unlock boards once the Board Master turns that on.",
+    "Communities and locked boards can't be deleted."] });
+  if (now.s && !was.s) parts.push({ head: "You're now a Super admin", items: [
+    "Manage every community.", "Create and delete communities.", "Add and remove admins.",
+    "Edit and delete locked boards.", "Use the People page."] });
+  if (added.length && !now.c && !now.s) for (const x of added) parts.push({ head: `You're now an admin of ${nm(x)}`, items: [
+    `In ${nm(x)}, create weeks, game days, and boards.`, "Edit and delete open boards.", "Locked boards stay locked."] });
+  if (now.u && !was.u) parts.push({ head: "You're on the unlimited plan", items: ["You can now request more than one community."] });
+  const gone = [];
+  if (was.c && !now.c) gone.push("You're no longer a Commissioner.");
+  if (was.s && !now.s) gone.push("You're no longer a Super admin.");
+  for (const x of dropped) gone.push(`You're no longer an admin of ${nm(x)}.`);
+  if (was.u && !now.u) gone.push("You're back to one community.");
+  if (gone.length) parts.push({ head: "Access removed", items: gone });
+  if (parts.length) await roleNotice(parts);
+  await sb.rpc("ack_roles", { r: now }); S.me.roles_seen = now;
+}
+function roleNotice(parts) {
+  S.noticeOpen = true;
+  return new Promise(resolve => {
+    const done = () => { scrim.remove(); S.noticeOpen = false; resolve(); };
+    const ok = h("button", { class: "btn primary", type: "button", onclick: done }, "Got it");
+    const scrim = h("div", { class: "scrim" },
+      h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": "Your access changed" },
+        h("h3", {}, parts.length > 1 ? "Your access changed" : parts[0].head),
+        parts.map(x => [parts.length > 1 && h("p", { style: "margin:12px 0 4px;font-weight:700;color:var(--chalk)" }, x.head),
+          h("ul", { style: "margin:0 0 4px;padding-left:20px;line-height:1.5" }, x.items.map(t => h("li", {}, t)))]),
+        h("div", { class: "mbtns" }, ok)));
+    document.body.append(scrim);
+    ok.focus();
+  });
 }
 
 /* ---------- Layout ---------- */
@@ -470,12 +574,28 @@ const ICONS = {
   moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>',
   squares: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   pools: '<path d="M3 5h5v5H3"/><path d="M3 14h5v5H3"/><path d="M8 7.5h4v9H8"/><path d="M12 12h9"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
   admins: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M18 14.8c1.8.7 3 2.4 3.5 5.2"/>'
 };
 function icon(name, size = 20) {
   const span = h("span", { "aria-hidden": "true", style: "display:inline-flex" });
   span.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
   return span;
+}
+// Slide-out menu from the right. items: [{ label, fn, cls }] (falsy entries skipped, "-" draws a divider)
+function openDrawer(title, items) {
+  const close = () => { d.classList.remove("on"); sc.classList.remove("on"); removeEventListener("keydown", onKey);
+    setTimeout(() => { d.remove(); sc.remove(); }, 230); };
+  const onKey = e => { if (e.key === "Escape") close(); };
+  const sc = h("div", { class: "dscrim", onclick: close });
+  const d = h("nav", { class: "drawer", "aria-label": title },
+    h("div", { class: "dhead" }, h("b", {}, title), iconBtn("close", "Close menu", close)),
+    items.filter(Boolean).filter((x, i, a) => x !== "-" || (i > 0 && i < a.length - 1 && a[i - 1] !== "-")).map(x => x === "-" ? h("hr") :
+      h("button", { type: "button", class: "ditem " + (x.cls || ""), onclick: () => { close(); x.fn(); } }, x.label)));
+  document.body.append(sc, d);
+  addEventListener("keydown", onKey);
+  requestAnimationFrame(() => { sc.classList.add("on"); d.classList.add("on"); d.querySelector(".ditem")?.focus(); });
 }
 const iconBtn = (name, label, fn, cls = "") => h("button", { type: "button", class: "iconbtn " + cls, "aria-label": label, title: label, onclick: fn }, icon(name));
 const isDarkTheme = () => document.documentElement.dataset.theme === "dark";
@@ -610,12 +730,13 @@ async function signOut() { await sb.auth.signOut(); await loadMe(); go("#/login"
 
 async function viewHome() {
   const all = must(await sb.from("communities").select("id,name").order("name"));
-  const list = isSuper() ? all : all.filter(c => S.admin.has(c.id));
+  const list = isSuper() || isComm() ? all : all.filter(c => S.admin.has(c.id));
   const mine = poolsShown() ? (must(await sb.rpc("my_pools")) || []) : [];
   const isPlayerOnly = !list.length && mine.length;
   // Admin access requests: the owner sees how many are waiting; everyone else sees their own request
-  const waiting = S.me?.is_owner ? (must(await sb.rpc("owner_requests")) || []).length : 0;
-  const myReq = S.me && !isSuper() ? must(await sb.from("access_requests").select("id,kind,new_name,status,community_id,created_at")
+  const reqs = S.me?.is_owner || isComm() ? (must(await sb.rpc("owner_requests")) || []) : [];
+  const waiting = reqs.length;
+  const myReq = S.me && !isSuper() && !isComm() ? must(await sb.from("access_requests").select("id,kind,new_name,status,community_id,created_at")
     .eq("user_id", S.me.id).order("created_at", { ascending: false }).limit(1).maybeSingle()) : null;
   render(
     S.me?.is_owner && h("div", { class: "switch" },
@@ -633,17 +754,17 @@ async function viewHome() {
       h("ul", { class: "list" }, mine.map(p => h("li", {},
         h("div", {}, h("a", { href: "#/p/" + p.pool_id }, p.name),
           h("div", { class: "meta" }, `${poolKindLabel(p)} ${seasonLabel("College Football", p.season)}: ${p.picks_done} of ${p.games} picked`)))))] : null,
-    waiting ? h("p", { class: "pstat open" }, h("a", { href: "#/people" }, `${countOf(waiting, "admin request")} waiting for your approval`)) : null,
+    waiting ? [h("h1", {}, `Admin requests (${waiting})`), h("div", { class: "people", style: "margin-bottom:22px" }, reqs.map(reqCard))] : null,
     isPlayerOnly ? null : h("h1", {}, "Communities"),
-    isSuper() && h("div", { class: "actions" }, btn("New community", newCommunity, "primary"),
-      h("a", { class: "btn", href: "#/people" }, waiting ? `People (${waiting})` : "People")),
+    (isSuper() || isComm()) && h("div", { class: "actions" }, btn("New community", newCommunity, "primary"),
+      isSuper() && h("a", { class: "btn", href: "#/people" }, waiting ? `People (${waiting})` : "People")),
     isPlayerOnly ? null : list.length
       ? h("ul", { class: "list" }, list.map(c => h("li", {}, h("a", { href: "#/c/" + c.id }, c.name),
           isSuper() && btn("Rename", () => renameCommunity(c)))))
       : h("p", { class: "empty" }, isSuper()
           ? "Create a community to start adding board sets."
           : "You aren't an admin on any community yet."),
-    S.me && !isSuper() ? requestBlock(all, myReq) : null
+    S.me && !isSuper() && !isComm() ? requestBlock(all, myReq) : null
   );
 }
 
@@ -652,7 +773,7 @@ async function viewHome() {
    Nothing is active until the Board Master approves it on the People screen.
    Plans cover one community the user owns; the unlimited plan covers more. */
 function requestBlock(all, req) {
-  const what = r => r.kind === "new" ? `new community "${r.new_name}"` : (all.find(c => c.id === r.community_id)?.name || "a community");
+  const what = r => all.find(c => c.id === r.community_id)?.name || "a community";
   if (req?.status === "pending") return h("div", { class: "panel" },
     h("p", {}, h("b", {}, "Request sent: "), what(req), ". Waiting for approval."),
     h("div", { class: "actions", style: "margin:0" }, btn("Cancel request", async () => {
@@ -660,38 +781,35 @@ function requestBlock(all, req) {
     })));
   return h("div", { class: "panel" },
     req?.status === "denied" && h("p", { class: "meta" }, `Your request for ${what(req)} wasn't approved.`),
-    h("p", { class: "meta" }, "Want to run squares boards? Ask for access to a community, or ask for a new one."),
+    h("p", { class: "meta" }, "Want to run squares boards? Ask to be added to a community."),
     h("div", { class: "actions", style: "margin:0" }, btn("Request admin access", () => requestAccess(all), "primary")));
 }
 async function requestAccess(all) {
   const open = all.filter(c => !S.admin.has(c.id));
-  const v = await modal({ title: "Request admin access", text: "The Board Master approves every request. You'll get access once it's approved.",
+  if (!open.length) return toast("You're already an admin of every community.", true);
+  const v = await modal({ title: "Request admin access", text: "A Commissioner approves your request. You'll get access once it's approved.",
     fields: [
-      { name: "kind", label: "I want to", value: open.length ? "join" : "new",
-        options: [...(open.length ? [{ value: "join", label: "Run an existing community" }] : []), { value: "new", label: "Start a new community" }] },
       { name: "cid", label: "Community", value: "", options: [{ value: "", label: "Pick one" }, ...open.map(c => ({ value: c.id, label: c.name }))] },
-      { name: "name", label: "New community name", maxlength: 80, placeholder: "Like Friday Shop Squares" },
       { name: "note", label: "Note (optional)", maxlength: 300, placeholder: "Who you are or who you run boards for" }
-    ], ok: "Send request",
-    after: inputs => {
-      const sync = () => {
-        inputs.cid.closest("label").style.display = inputs.kind.value === "join" ? "" : "none";
-        inputs.name.closest("label").style.display = inputs.kind.value === "new" ? "" : "none";
-      };
-      inputs.kind.addEventListener("change", sync); sync();
-    } });
+    ], ok: "Send request" });
   if (!v) return;
-  if (v.kind === "join" && !v.cid) return toast("Pick a community.", true);
-  if (v.kind === "new" && !v.name.trim()) return toast("Enter a name for the new community.", true);
+  if (!v.cid) return toast("Pick a community.", true);
   try {
-    must(await sb.rpc("request_access", { k: v.kind, cid: v.kind === "join" ? v.cid : null, nm: v.kind === "new" ? v.name.trim() : null, msg: v.note }));
+    must(await sb.rpc("request_access", { k: "join", cid: v.cid, nm: null, msg: v.note }));
     route(); toast("Request sent");
   } catch (e) { toast(e.message, true); }
+}
+// Request card, used on the home screen and the People page
+function reqCard(r) {
+  return h("div", { class: "person" },
+    h("div", { class: "phead" }, h("div", {}, h("b", {}, r.display_name), h("div", { class: "meta" }, r.email))),
+    h("p", {}, r.kind === "new" ? `Wants a new community: "${r.new_name}"` : `Wants to run ${r.community_name}`),
+    r.note && h("p", { class: "meta" }, `"${r.note}"`),
+    h("div", { class: "actions" }, btn("Approve", () => decideRequest(r, true), "primary"), btn("Deny", () => decideRequest(r, false), "danger")));
 }
 async function decideRequest(r, approve) {
   try {
     if (!approve) {
-      if (!await confirmBox("Deny this request?", `${r.display_name} gets no access. They can send a new request.`, "Deny")) return;
       must(await sb.rpc("decide_request", { rid: r.id, approve: false }));
       return route(), toast("Request denied");
     }
@@ -715,7 +833,11 @@ async function decideRequest(r, approve) {
 async function newCommunity() {
   const v = await modal({ title: "New community", fields: [{ name: "name", label: "Community name", required: true, maxlength: 80 }], ok: "Create community" });
   if (!v || !v.name.trim()) return;
-  try { must(await sb.from("communities").insert({ name: v.name.trim() })); route(); }
+  try {
+    if (isSuper()) must(await sb.from("communities").insert({ name: v.name.trim() }));
+    else must(await sb.rpc("commish_new_community", { nm: v.name.trim() }));
+    route();
+  }
   catch (e) { toast(e.message, true); }
 }
 
@@ -726,13 +848,6 @@ async function viewPeople() {
   let people = must(await sb.rpc("admin_people")) || [];
   const comms = must(await sb.from("communities").select("id,name").order("name"));
   const reqs = S.me.is_owner ? (must(await sb.rpc("owner_requests")) || []) : [];
-  const reqCard = r => h("div", { class: "person" },
-    h("div", { class: "phead" }, h("div", {}, h("b", {}, r.display_name), h("div", { class: "meta" }, r.email)),
-      h("div", { class: "tags" }, h("span", { class: "tag" }, r.kind === "new" ? "New community" : "Join"))),
-    h("p", {}, r.kind === "new" ? `Wants a new community: "${r.new_name}"` : `Wants to run ${r.community_name}`),
-    r.note && h("p", { class: "meta" }, `"${r.note}"`),
-    r.kind === "new" && h("p", { class: "meta" }, `Already owns ${r.owned}. Plan: ${r.unlimited ? "unlimited communities" : "one community"}.`),
-    h("div", { class: "actions" }, btn("Approve", () => decideRequest(r, true), "primary"), btn("Deny", () => decideRequest(r, false), "danger")));
   const list = h("div", { class: "people" });
   const search = h("input", { type: "search", class: "search", placeholder: "Search name or email", oninput: draw });
   const reload = async () => { people = must(await sb.rpc("admin_people")) || []; draw(); };
@@ -1529,25 +1644,29 @@ function boardBlock(b, mg, ctx) {
       h("span", { class: "status " + (b.locked ? "locked" : "open") }, b.locked ? "Locked" : "Open"),
 
       b.scores?.state === "in" && h("span", { class: "status live" }, "Live"),
-      btn("Save image", () => saveImage(sheet, b)),
-      canShareFiles() ? btn("Share image", () => shareImage(sheet, b)) : null,
-      btn("Copy link", () => copy(link("#/b/" + b.id))),
-      canEdit && btn("Scores", () => editScores(b, ctx, refresh)),
-      !canEdit && canPull(ctx) && b.scores?.state !== "post" && b.scores?.state !== "manual" && !b.scores?.final && btn("Update score", () => viewerPull(b, refresh)),
-      mg && !b.locked && btn("Edit details", () => editDetails(b, refresh, ctx?.league)),
-      editable && btn("Lock board", () => lockBoard(b, refresh)),
-      b.locked && canUnlock(ctx?.community_id || b.board_sets?.community_id) && btn("Unlock", () => unlockBoard(b, refresh), "primary"),
-      mg && !b.locked && btn("Move board", () => moveBoard(b, ctx)),
-      mg && !b.locked && ctx?.siblings > 1 && btn("Move up", () => reorderBoard(b, -1, ctx)),
-      mg && !b.locked && ctx?.siblings > 1 && btn("Move down", () => reorderBoard(b, 1, ctx)),
-      mg && !b.locked && btn("Delete", () => deleteBoard(b), "danger"),
-      owner && btn("Helpers", () => go("#/b/" + b.id)),
-      S.me?.is_owner && btn("Audit log", () => downloadAudit(b)),
       b.locked_at
         ? h("span", { class: "lockstamp" }, `${b.locked_auto ? "Auto Locked" : "Locked"} ${lockTime(b.locked_at)}`)
         : (kickoffOf(b)
             ? h("span", { class: "lockstamp" }, `Auto locks ${lockTime(new Date(Date.parse(kickoffOf(b)) - 15 * 60000))}`)
-            : null)),
+            : null),
+      iconBtn("menu", "Board menu", () => openDrawer(boardName(b), [
+        { label: "Save image", fn: () => saveImage(sheet, b) },
+        canShareFiles() && { label: "Share image", fn: () => shareImage(sheet, b) },
+        { label: "Copy link", fn: () => copy(link("#/b/" + b.id)) },
+        "-",
+        canEdit && { label: "Scores", fn: () => editScores(b, ctx, refresh) },
+        !canEdit && canPull(ctx) && b.scores?.state !== "post" && b.scores?.state !== "manual" && !b.scores?.final && { label: "Update score", fn: () => viewerPull(b, refresh) },
+        mg && !b.locked && { label: "Edit details", fn: () => editDetails(b, refresh, ctx?.league) },
+        editable && { label: "Lock board", fn: () => lockBoard(b, refresh) },
+        b.locked && canUnlock(ctx?.community_id || b.board_sets?.community_id) && { label: "Unlock", fn: () => unlockBoard(b, refresh), cls: "primary" },
+        mg && !b.locked && { label: "Move board", fn: () => moveBoard(b, ctx) },
+        mg && !b.locked && ctx?.siblings > 1 && { label: "Move up", fn: () => reorderBoard(b, -1, ctx) },
+        mg && !b.locked && ctx?.siblings > 1 && { label: "Move down", fn: () => reorderBoard(b, 1, ctx) },
+        owner && { label: "Helpers", fn: () => go("#/b/" + b.id) },
+        S.me?.is_owner && { label: "Audit log", fn: () => downloadAudit(b) },
+        mg && !b.locked && "-",
+        mg && !b.locked && { label: "Delete board", fn: () => deleteBoard(b), cls: "danger" }
+      ]), "barmenu")),
     h("div", { class: "fit" }, sheet)
   );
   watchLive(b, ctx, mg, refresh);
