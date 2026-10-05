@@ -438,6 +438,7 @@ main.wide{max-width:1400px}
 .drawer .ditem.dtog{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .drawer .dpill{flex-shrink:0;min-width:44px;padding:5px 10px;border-radius:999px;background:#E2DACF;color:#1F1915;font-size:13px;font-weight:700;text-align:center}
 .drawer .dpill.on{background:#1E6B2A;color:#fff}
+.drawer .dnote{padding:0 14px 10px;font-size:14px;color:#6B6B6B;overflow:hidden;text-overflow:ellipsis}
 .drawer hr{border:0;border-top:1px solid rgba(0,0,0,.14);margin:6px 0 12px}
 .drawer .iconbtn{color:var(--ink);background:transparent;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
 @media (prefers-reduced-motion:reduce){.dscrim,.drawer{transition:none}}
@@ -725,7 +726,7 @@ function openDrawer(title, items) {
   const sc = h("div", { class: "dscrim", onclick: close });
   const d = h("nav", { class: "drawer", "aria-label": title },
     h("div", { class: "dhead" }, h("b", {}, title), iconBtn("close", "Close menu", close)),
-    items.filter(Boolean).filter((x, i, a) => x !== "-" || (i > 0 && i < a.length - 1 && a[i - 1] !== "-")).map(x => x === "-" ? h("hr") : x.heading ? h("div", { class: "dlabel" }, x.heading) :
+    items.filter(Boolean).filter((x, i, a) => x !== "-" || (i > 0 && i < a.length - 1 && a[i - 1] !== "-")).map(x => x === "-" ? h("hr") : x.heading ? h("div", { class: "dlabel" }, x.heading) : x.note ? h("div", { class: "dnote" }, x.note) :
       h("button", { type: "button", class: "ditem " + (x.cls || "") + (x.toggle != null ? " dtog" : ""), onclick: () => { close(); x.fn(); },
         ...(x.toggle != null ? { role: "switch", "aria-checked": x.toggle ? "true" : "false" } : {}) },
         x.label, x.toggle != null && h("span", { class: "dpill" + (x.toggle ? " on" : "") }, x.toggle ? "On" : "Off"))));
@@ -752,7 +753,7 @@ function topbar() {
     h("div", { class: "who" },
       themeButton(),
       S.session
-        ? [h("button", { type: "button", class: "whoname", title: "Change your name", onclick: () => editName() }, displayName(S.me) + (isSuper() ? " (super admin)" : "")), btn("Sign out", signOut, "ghost")]
+        ? [h("button", { type: "button", class: "whoname", title: "Your profile", "aria-haspopup": "dialog", onclick: profileMenu }, displayName(S.me) + (isSuper() ? " (super admin)" : "")), btn("Sign out", signOut, "ghost")]
         : h("a", { href: "#/login" }, "Admin sign in"))
   );
 }
@@ -2567,6 +2568,16 @@ async function boardFromVote(p, g) {
   } catch (e) { toast(e.message, true); }
 }
 
+// Profile menu: tap your name in the top right corner
+function profileMenu() {
+  openDrawer(displayName(S.me), [
+    S.me?.email && { note: S.me.email },
+    { label: "My profile and squares", fn: () => go("#/me") },
+    { label: "Change my name", fn: () => editName() },
+    "-",
+    { label: "Help and guides", fn: () => go("#/help") },
+    { label: "Sign out", fn: signOut, cls: "danger" }]);
+}
 // Owner menu (☰ next to Help on every page): the switches and What's coming, in the side pop-out
 function ownerMenu() {
   openDrawer("Owner controls", [
