@@ -445,7 +445,9 @@ main.wide{max-width:1400px}
 .minisq .no{position:absolute;right:3px;bottom:2px;font:600 10px/1 var(--ui);color:#555}
 .sqfields{display:grid;grid-template-columns:84px minmax(0,1fr);gap:6px;min-width:0}
 .sqfields select,.sqfields input{width:100%;box-sizing:border-box;min-width:0;min-height:40px;border-radius:10px;border:1px solid var(--line-2);background:var(--card);color:var(--chalk);font:inherit;padding:0 8px}
-.sqacts{display:flex;justify-content:flex-end;gap:14px;align-items:center}
+.sqacts{grid-column:1 / -1;display:flex;align-items:center;gap:14px}
+.sqacts select{flex:1 1 auto;max-width:220px}
+.sqacts .linkbtn:first-of-type{margin-left:auto}
 .sqacts .linkbtn{min-height:32px;padding:2px 0;font-size:13px}
 .sqedit select,.sqedit input{width:100%;box-sizing:border-box;min-width:0}
 .sqleague{min-width:0}
@@ -2913,8 +2915,8 @@ async function viewProfile() {
               h("button", { type: "button", class: "minisq", "aria-label": r.avatar ? "Change photo" : "Add photo", title: r.avatar ? "Change photo" : "Add photo", onclick: () => fileIn.click() },
                 r.avatar ? h("img", { class: "sqav", src: r.avatar, alt: "" }) : h("span", { class: "addph" }, "+ photo"),
                 pvName, h("span", { class: "no" }, r.square || "")),
-              h("div", { class: "sqfields" }, sel, nm, fontSel,
-                h("div", { class: "sqacts" },
+              h("div", { class: "sqfields" }, sel, nm,
+                h("div", { class: "sqacts" }, fontSel,
                   r.avatar && h("button", { type: "button", class: "linkbtn", onclick: () => { r.avatar = null; draw(); } }, "No photo"),
                   h("button", { type: "button", class: "linkbtn danger", "aria-label": "Remove this square", onclick: () => { rows.splice(i, 1); draw(); } }, "Remove"))),
               fileIn);
