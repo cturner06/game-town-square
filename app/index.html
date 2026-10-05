@@ -402,6 +402,22 @@ main.wide{max-width:1400px}
 .practice{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:10px 0 14px;padding:12px 14px;border-radius:12px;
   background:repeating-linear-gradient(135deg,rgba(242,182,29,.16) 0 12px,rgba(242,182,29,.08) 12px 24px);box-shadow:inset 0 0 0 1px rgba(242,182,29,.6)}
 .practice span{color:var(--chalk-dim)}
+.sqgrid{display:grid;gap:10px}
+.capbox{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+@media (min-width:760px){.sqgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.sqleague{padding:12px 14px;border-radius:14px;background:var(--card);box-shadow:var(--card-edge)}
+.sqhead{display:flex;align-items:center;gap:10px}
+.sqhead b{font-size:17px;min-width:62px}
+.sqhead .meta{flex:1;min-width:0;font-size:13px}
+.sqedit{display:grid;grid-template-columns:96px minmax(0,1fr) 32px;gap:8px;align-items:center;margin-top:8px}
+.sqedit select,.sqedit input{width:100%;box-sizing:border-box;min-width:0}
+.sqleague{min-width:0}
+.sqedit select,.sqedit input,.sqrow select{min-height:42px;border-radius:10px;border:1px solid var(--line-2);background:var(--card);color:var(--chalk);font:inherit;padding:0 10px}
+.sqlist{display:flex;flex-direction:column;border-radius:14px;background:var(--card);box-shadow:var(--card-edge)}
+.sqrow{display:grid;grid-template-columns:44px 1fr minmax(120px,170px) auto;gap:10px;align-items:center;padding:8px 12px}
+.sqrow + .sqrow{border-top:1px solid var(--line)}
+.sqn{display:flex;align-items:center;justify-content:center;height:34px;border-radius:9px;background:var(--chip);font-weight:800}
+@media (max-width:480px){.sqrow{grid-template-columns:40px 1fr;}.sqrow select{grid-column:1 / -1}}
 .dscrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;opacity:0;transition:opacity .2s}
 .dscrim.on{opacity:1}
 .drawer{position:fixed;top:0;right:0;bottom:0;width:min(300px,84vw);background:var(--paper);color:var(--ink);z-index:61;
@@ -762,7 +778,7 @@ document.fonts?.ready.then(fitBoards);
 /* ---------- Router ---------- */
 async function route() {
   stopWatching();
-  const [key, id, sub] = location.hash.replace(/^#\/?/, "").split("/");
+  const [key, id, sub] = location.hash.replace(/^#\/?/, "").split("?")[0].split("/");
   try {
     if (!CONFIGURED) return viewSetup();
     if (key === "b" && id) return await viewBoard(id);
@@ -770,11 +786,13 @@ async function route() {
     if (key === "w" && id) return await viewWeek(id);
     if (key === "p" && id) return await viewPool(id);
     if (key === "j" && id) return await joinFromLink(id);
+    if (key === "i" && id) return await joinCommunityLink(id);
     if (key === "help") return viewHelp();
     if (key === "v" && id) return await viewVote(id);
     if (key === "login" || !S.session) return viewLogin();
     if (key === "c" && id) return await viewCommunity(id, sub);
     if (key === "people") return await viewPeople();
+    if (key === "me") return await viewProfile();
     if (key === "preview") return viewPreview();
     await viewHome();
     if (S.me && (!S.me.first_name || !S.me.last_name) && !S.askedName) { S.askedName = true; editName(true); }
@@ -847,10 +865,11 @@ function viewLogin(mode = "signin") {
     await loadMe(); go(afterLogin());
   };
   const field = (label, el, half) => h("label", { class: half ? "half" : "" }, h("span", {}, label), el);
-  const joining = /^#\/j\//.test(nextHash());
+  const joining = /^#\/j\//.test(nextHash()), inviting = /^#\/i\//.test(nextHash());
   $app.replaceChildren(topbar(), h("div", { class: "panel" },
-    h("h1", {}, creating ? "Create login" : joining ? "Sign in to join" : "Admin sign in"),
-    h("p", {}, joining ? (creating ? "Create a login to make your bracket picks. Your name shows on the leaderboard."
+    h("h1", {}, creating ? "Create login" : joining || inviting ? "Sign in to join" : "Admin sign in"),
+    h("p", {}, inviting ? (creating ? "Create a login to join the community and set up your profile and squares."
+                                    : "Sign in to join the community. New here? Tap Create login.") : joining ? (creating ? "Create a login to make your bracket picks. Your name shows on the leaderboard."
                                    : "Sign in to join the pool and make your picks. New here? Tap Create login.")
              : creating ? "For people running boards. Your name shows on the boards you manage."
                         : "Viewers don't need to sign in. Just open the board link you were sent."),
@@ -889,13 +908,24 @@ async function viewHome() {
   const all = must(await sb.from("communities").select("id,name,is_practice").order("is_practice", { ascending: false }).order("name"));
   const list = isSuper() || isComm() ? all : all.filter(c => S.admin.has(c.id));
   const mine = poolsShown() ? (must(await sb.rpc("my_pools")) || []) : [];
-  const isPlayerOnly = !list.length && mine.length;
+  const joined = S.me ? (must(await sb.rpc("my_member_communities")) || []).filter(c => !list.some(x => x.id === c.id)) : [];
+  const isPlayerOnly = !list.length && (mine.length || joined.length);
   // Admin access requests: the owner sees how many are waiting; everyone else sees their own request
   const reqs = S.me?.is_owner || isComm() ? (must(await sb.rpc("owner_requests")) || []) : [];
   const waiting = reqs.length;
   const myReq = S.me && !isSuper() && !isComm() ? must(await sb.from("access_requests").select("id,kind,new_name,status,community_id,created_at")
     .eq("user_id", S.me.id).order("created_at", { ascending: false }).limit(1).maybeSingle()) : null;
+  const codeBox = h("input", { type: "text", class: "search", placeholder: "Access code", autocomplete: "off", maxlength: 12, style: "max-width:200px;margin:0" });
   render(
+    joined.length ? [h("h1", {}, "My communities"),
+      h("ul", { class: "list" }, joined.map(c => h("li", {}, h("a", { href: "#/c/" + c.id }, c.name))))] : null,
+    S.me && h("div", { class: "actions", style: "align-items:center" },
+      h("a", { class: "btn", href: "#/me" }, "My profile and squares"),
+      codeBox, btn("Use code", async () => {
+        const c = codeBox.value.trim(); if (!c) return toast("Type the code you were given.", true);
+        try { const r = must(await sb.rpc("redeem_code", { c })); await loadMe(); toast("You're in"); go(r.pool_id ? "#/p/" + r.pool_id : "#/c/" + r.community_id); }
+        catch (e) { toast(e.message, true); }
+      })),
     mine.length ? [h("h1", {}, "My pools"),
       h("ul", { class: "list" }, mine.map(p => h("li", {},
         h("div", {}, h("a", { href: "#/p/" + p.pool_id }, p.name),
@@ -1296,10 +1326,13 @@ function weekStatus(w) {
 async function viewCommunity(id, tab = "") {
   const c = must(await sb.from("communities").select("*").eq("id", id).maybeSingle());
   if (!c) throw new Error("Community not found.");
-  if (!canManage(id)) throw new Error("You aren't an admin on this community.");
+  if (!canManage(id)) {
+    if (!must(await sb.rpc("is_member", { cid: id }))) throw new Error("You aren't in this community. Ask an admin for an invite link or a code.");
+    return await viewCommunityAsPlayer(c);
+  }
   // Pools need the Playoffs add-on on the community's creator (Commissioners and the Board Master always have it)
   const playoffs = tab === "pools" ? !!must(await sb.rpc("community_playoffs", { cid: id })) : true;
-  const tabs = [["", "Squares", "squares"], votesShown() && ["vote", "Vote", "vote"], poolsShown() && ["pools", "Pools", "pools"], (isSuper() || isCommish(id)) && ["admins", "Admins", "admins"]].filter(Boolean);
+  const tabs = [["", "Squares", "squares"], ["players", "Players", "admins"], votesShown() && ["vote", "Vote", "vote"], poolsShown() && ["pools", "Pools", "pools"], (isSuper() || isCommish(id)) && ["admins", "Admins", "admins"]].filter(Boolean);
   if (!tabs.some(t => t[0] === tab)) tab = "";
 
   const head = [
@@ -1322,6 +1355,8 @@ async function viewCommunity(id, tab = "") {
   ];
   let weeksForForm = [];
   const body = [];
+
+  if (tab === "players") body.push(await playersTab(c));
 
   if (tab === "vote") {
     const polls = must(await sb.from("polls").select("id,league,season,label,games,closes_at,closed,created_at").eq("community_id", id).order("created_at", { ascending: false }));
@@ -2543,6 +2578,190 @@ function ownerMenu() {
     { label: "People", fn: () => go("#/people") },
     { label: "Help and guides", fn: () => go("#/help") }]);
 }
+/* ---------- Players, invites, saved squares ----------
+   An admin shares the community's invite link (reusable until turned off) or a one-time code.
+   Players get view access and save their squares per league in their profile. Every new board
+   in that community and league starts with those squares filled in (the database does it). */
+const SQUARE_LEAGUES = [["College Football", "NCAAF"], ["NFL", "NFL"], ["NBA", "NBA"],
+  ["Men's College Basketball", "NCAAM"], ["Women's College Basketball", "NCAAW"], ["WNBA", "WNBA"]];
+
+async function joinCommunityLink(tok) {
+  if (!S.session) { setNext("#/i/" + tok); return viewLogin("create"); }
+  try {
+    const cid = must(await sb.rpc("join_community", { tok }));
+    await loadMe(); toast("You're in. Set up your squares.");
+    go("#/me?c=" + cid);
+  } catch (e) { render(h("p", { class: "err" }, e.message)); }
+}
+
+async function viewCommunityAsPlayer(c) {
+  const weeks = must(await sb.from("weeks").select("id,label,league,season,sort_key,board_sets(id,name,game_date,boards(id))").eq("community_id", c.id));
+  weeks.sort(weekSort).reverse();
+  render(
+    h("div", { class: "crumbs" }, h("a", { href: "#/" }, "Home")),
+    h("h1", {}, c.name),
+    h("div", { class: "actions" }, h("a", { class: "btn", href: "#/me?c=" + c.id }, "My squares")),
+    weeks.length ? h("ul", { class: "list" }, weeks.map(w => {
+      const n = w.board_sets.reduce((t, x) => t + x.boards.length, 0);
+      return h("li", {}, h("div", {}, h("a", { href: "#/w/" + w.id }, `${w.league} ${w.label}`),
+        h("div", { class: "meta" }, `${countOf(n, "board")} · ${w.board_sets.map(x => x.name).join(", ") || "no game days yet"}`)));
+    })) : h("p", { class: "empty" }, "No boards yet. Check back soon.")
+  );
+}
+
+async function playersTab(c) {
+  const [inv, members, saved] = await Promise.all([
+    sb.rpc("community_invite", { cid: c.id }).then(must),
+    sb.rpc("community_members_list", { cid: c.id }).then(must),
+    sb.from("square_defaults").select("id,user_id,league,square,display_name").eq("community_id", c.id).order("league").order("square").then(must)]);
+  const url = link("#/i/" + inv.token);
+  const nameOf = uid => members.find(m => m.user_id === uid)?.display_name;
+  const save = fn => async () => { try { await fn(); route(); } catch (e) { toast(e.message, true); } };
+  return h("div", {},
+    h("h2", {}, "Invite players"),
+    h("p", { class: "meta" }, "Players can see this community's boards and save their squares. Every new board in a league starts with those squares filled in."),
+    h("div", { class: "panel" },
+      h("p", { style: "margin:0 0 8px" }, h("b", {}, "Invite link "), h("span", { class: "chip" + (inv.active ? " open" : "") }, inv.active ? "On" : "Off")),
+      h("p", { class: "meta", style: "margin:0 0 10px;word-break:break-all" }, inv.active ? url : "Turned off. Nobody can join with it."),
+      h("div", { class: "actions", style: "margin:0" },
+        inv.active && btn("Copy invite link", () => copy(url), "primary"),
+        btn(inv.active ? "Turn off" : "Turn on", save(async () => must(await sb.from("community_invites").update({ active: !inv.active }).eq("community_id", c.id)))),
+        btn("New link", save(async () => {
+          if (!await confirmBox("Make a new invite link?", "The old link stops working. People who already joined stay.", "New link")) throw new Error("Kept the current link");
+          must(await sb.rpc("community_invite", { cid: c.id, fresh: true }));
+        })))),
+    h("div", { class: "panel" },
+      h("p", { style: "margin:0 0 8px" }, h("b", {}, "One-time code. "), h("span", { class: "meta" }, "Works once, then stops. For someone joining from another community.")),
+      btn("Make a code", async () => {
+        try {
+          const code = must(await sb.rpc("make_access_code", { cid: c.id }));
+          await modal({ title: "One-time code", text: `Give them this code. They enter it on their home screen under Use code. It works once.`,
+            fields: [{ name: "code", label: "Code", value: code }], ok: "Done" });
+        } catch (e) { toast(e.message, true); }
+      })),
+    h("h2", {}, `Players (${members.length})`),
+    members.length ? h("div", { class: "people" }, members.map(m => h("div", { class: "person" },
+      h("div", { class: "phead" }, h("div", {}, h("b", {}, m.display_name), h("div", { class: "meta" }, m.email)),
+        btn("Remove", save(async () => {
+          if (!await confirmBox(`Remove ${m.display_name}?`, "They lose view access here. Their saved squares here are deleted.", "Remove", "danger")) throw new Error("Not removed");
+          must(await sb.from("square_defaults").delete().eq("community_id", c.id).eq("user_id", m.user_id));
+          must(await sb.from("community_members").delete().eq("community_id", c.id).eq("user_id", m.user_id));
+        }), "danger")))))
+      : h("p", { class: "empty" }, "Nobody yet. Share the invite link."),
+    h("h2", {}, "Saved squares"),
+    h("p", { class: "meta" }, "Filled in on every new board in that league. Link a square to a player once they join, so they can manage it from their profile."),
+    (() => {
+      const lvl = S.me?.is_owner ? 4 : isSuper() ? 3 : isComm() ? 2 : 1;
+      const who = ["", "a community admin", "a Commissioner", "a super admin", "the Board Master"][c.saved_cap_level || 0];
+      return h("div", { class: "panel capbox" },
+        h("div", {}, h("b", {}, `Up to ${c.saved_cap} saved squares per board`),
+          h("div", { class: "meta" }, SQUARE_LEAGUES.map(([lg, sh]) => [lg, sh, saved.filter(x => x.league === lg).length]).filter(x => x[2])
+            .map(([, sh, n]) => `${sh} ${n} of ${c.saved_cap}`).join(" · ") || "None saved yet"),
+          who && h("div", { class: "meta" }, `Set by ${who}.` + (lvl < c.saved_cap_level ? ` Only ${who} or higher can change it.` : ""))),
+        lvl >= (c.saved_cap_level || 0) && btn("Change limit", async () => {
+          const v = await modal({ title: "Saved squares per board", text: "How many saved squares can fill in on each new board, per league. Your change locks it so only your level or higher can change it.",
+            fields: [{ name: "n", label: "Limit (0 to 100)", type: "number", value: c.saved_cap }], ok: "Save" });
+          if (!v) return;
+          try { must(await sb.rpc("set_saved_cap", { cid: c.id, n: Number(v.n) })); route(); toast("Limit saved"); } catch (e) { toast(e.message, true); }
+        }));
+    })(),
+    h("div", { class: "actions" }, btn("Add saved square", () => addSavedSquare(c, saved), "primary")),
+    SQUARE_LEAGUES.map(([lg, short]) => {
+      const rows = saved.filter(x => x.league === lg);
+      if (!rows.length) return null;
+      return [h("h3", { style: "margin:14px 0 6px" }, `${lg} (${short})`),
+        h("div", { class: "sqlist" }, rows.map(x => {
+          const pick = h("select", { "aria-label": `Who owns square ${x.square}` },
+            h("option", { value: "" }, "No login yet"), members.map(m => h("option", { value: m.user_id, selected: m.user_id === x.user_id }, m.display_name)));
+          pick.addEventListener("change", save(async () => must(await sb.from("square_defaults").update({ user_id: pick.value || null }).eq("id", x.id))));
+          return h("div", { class: "sqrow" }, h("span", { class: "sqn" }, String(x.square)), h("b", {}, x.display_name), pick,
+            h("button", { type: "button", class: "linkbtn danger", onclick: save(async () => must(await sb.from("square_defaults").delete().eq("id", x.id))) }, "Remove"));
+        }))];
+    }));
+}
+async function addSavedSquare(c, saved) {
+  const v = await modal({ title: "Add saved square", fields: [
+    { name: "league", label: "League", value: "College Football", options: SQUARE_LEAGUES.map(([l, s]) => ({ value: l, label: `${l} (${s})` })) },
+    { name: "square", label: "Square (1 to 100)", type: "number", value: "", half: true },
+    { name: "name", label: "Display name", value: "", maxlength: 40, half: true, placeholder: "Like C&C" }], ok: "Save square" });
+  if (!v) return;
+  const sq = Number(v.square);
+  if (!(sq >= 1 && sq <= 100)) return toast("Pick a square from 1 to 100.", true);
+  if (!v.name.trim()) return toast("Enter the name that shows in the square.", true);
+  if (saved.some(x => x.league === v.league && x.square === sq)) return toast(`Square ${sq} is already saved for ${v.league}.`, true);
+  try { must(await sb.from("square_defaults").insert({ community_id: c.id, league: v.league, square: sq, display_name: v.name.trim() })); route(); }
+  catch (e) { toast(e.message, true); }
+}
+
+// My profile: name, and my saved squares for each community I'm in
+async function viewProfile() {
+  const want = new URLSearchParams(location.hash.split("?")[1] || "").get("c");
+  const joined = must(await sb.rpc("my_member_communities")) || [];
+  const adm = S.admin.size ? must(await sb.from("communities").select("id,name").in("id", [...S.admin])) : [];
+  const comms = [...joined, ...adm.filter(a => !joined.some(j => j.id === a.id))].sort((a, b) => a.name.localeCompare(b.name));
+  let cid = comms.some(c => c.id === want) ? want : comms[0]?.id;
+  const box = h("div");
+  const pickC = comms.length > 1 && h("select", { "aria-label": "Community", style: "max-width:320px" },
+    comms.map(c => h("option", { value: c.id, selected: c.id === cid }, c.name)));
+  if (pickC) pickC.addEventListener("change", () => { cid = pickC.value; load(); });
+  async function load() {
+    if (!cid) return box.replaceChildren(h("p", { class: "empty" }, "You aren't in a community yet. Use an invite link or a code from an admin."));
+    const all = must(await sb.from("square_defaults").select("id,user_id,league,square,display_name").eq("community_id", cid));
+    const cap = (must(await sb.from("communities").select("saved_cap").eq("id", cid).maybeSingle()) || {}).saved_cap ?? 30;
+    const mineAll = all.filter(x => x.user_id === S.me.id);
+    box.replaceChildren(h("div", { class: "sqgrid" }, SQUARE_LEAGUES.map(([lg, short]) => {
+      let rows = mineAll.filter(x => x.league === lg).map(x => ({ square: x.square, name: x.display_name }));
+      const had = rows.length > 0;   // so turning a league off can still be saved
+      const taken = all.filter(x => x.league === lg && x.user_id !== S.me.id).map(x => x.square);
+      const room = () => cap - taken.length - rows.length;   // open saved-square spots left in this league
+      const wrap = h("div", { class: "sqleague" });
+      const draw = () => {
+        const on = rows.length > 0;
+        const used = () => rows.map(r => r.square);
+        wrap.replaceChildren(...[
+          h("div", { class: "sqhead" }, h("b", {}, short), h("span", { class: "meta" }, `${lg} · ${taken.length + rows.length} of ${cap} saved`),
+            h("button", { type: "button", class: "mtog" + (on ? " on" : ""), role: "switch", "aria-checked": on ? "true" : "false", "aria-label": `${lg} squares`,
+              onclick: () => { if (!on && room() < 1) return toast(`Saved squares are full for ${short} (${cap} of ${cap}).`, true);
+                rows = on ? [] : [{ square: null, name: displayName(S.me) }]; draw(); } }, h("span", { class: "oknob" }))),
+          on && rows.map((r, i) => {
+            const sel = h("select", { "aria-label": `${short} square` }, h("option", { value: "" }, "Square"),
+              Array.from({ length: 100 }, (_, k) => k + 1).filter(n => !taken.includes(n) && (n === r.square || !used().includes(n)))
+                .map(n => h("option", { value: n, selected: n === r.square }, String(n))));
+            sel.addEventListener("change", () => { r.square = Number(sel.value) || null; draw(); });
+            const nm = h("input", { type: "text", value: r.name, maxlength: 40, "aria-label": `${short} display name`, placeholder: "Display name" });
+            nm.addEventListener("input", () => { r.name = nm.value; });
+            return h("div", { class: "sqedit" }, sel, nm,
+              h("button", { type: "button", class: "linkbtn danger", "aria-label": "Remove this square", onclick: () => { rows.splice(i, 1); draw(); } }, "×"));
+          }),
+          on && h("div", { class: "actions", style: "margin:6px 0 0" }, room() > 0
+            ? h("button", { type: "button", class: "linkbtn", onclick: () => { rows.push({ square: null, name: rows[0]?.name || displayName(S.me) }); draw(); } }, "+ Add square")
+            : h("span", { class: "meta" }, `Full: ${cap} of ${cap} saved squares used.`)),
+          (on || had) && h("div", { class: "actions", style: "margin:8px 0 0" }, btn("Save " + short, async () => {
+            if (rows.some(r => !r.square || !r.name.trim())) return toast("Pick a square and a name for each row.", true);
+            try {
+              must(await sb.from("square_defaults").delete().eq("community_id", cid).eq("user_id", S.me.id).eq("league", lg));
+              if (rows.length) must(await sb.from("square_defaults").insert(rows.map(r => ({ community_id: cid, user_id: S.me.id, league: lg, square: r.square, display_name: r.name.trim() }))));
+              toast(`${short} squares saved`); load();
+            } catch (e) { toast(/duplicate|unique/i.test(e.message) ? "Someone just took one of those squares. Pick another." : e.message, true); load(); }
+            // (the database also refuses anything over the community's saved-square limit)
+          }, "primary"))].flat(Infinity).filter(x => x !== false && x != null));
+      };
+      draw();
+      return wrap;
+    })));
+  }
+  render(
+    h("div", { class: "crumbs" }, h("a", { href: "#/" }, "Home")),
+    h("h1", {}, "My profile"),
+    h("div", { class: "panel" }, h("p", { style: "margin:0 0 8px" }, h("b", {}, displayName(S.me)), h("span", { class: "meta" }, " · " + (S.me.email || ""))),
+      btn("Change my name", () => editName())),
+    h("h2", {}, "Default square positions"),
+    h("p", { class: "meta" }, "Your squares fill in automatically on every new board in that league. A square you save is yours alone in this community."),
+    pickC && h("div", { class: "actions" }, pickC),
+    box);
+  await load();
+}
+
 async function toggleVotes() {
   const on = !S.votesOn;
   if (!await confirmBox(on ? "Turn on vote pages?" : "Turn off vote pages?",
