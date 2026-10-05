@@ -155,10 +155,10 @@ h2{font:700 20px/1.2 var(--ui);margin:28px 0 10px}
 .slabel .tlogo{height:40px;width:40px;object-fit:contain;margin-right:10px;flex-shrink:0;transform:rotate(90deg)}
 .corner{display:flex;align-items:center;justify-content:center;overflow:hidden}
 .corner .lgmark{max-width:82%;max-height:82%;object-fit:contain}
-.lgbadge{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:86%;padding:9px 3px;border-radius:9px;background:#1D1D1D;color:#fff;
-  box-shadow:inset 0 0 0 2px #C9C9C9;text-align:center;line-height:1}
-.lgbadge span{font:700 10px/1 var(--ui);letter-spacing:1px}
-.lgbadge b{font:800 17px/1 var(--display);letter-spacing:.4px}
+.lgbadge{position:relative;width:88px;height:79px}
+.lgbadge svg{position:absolute;inset:0;width:100%;height:100%}
+.lgbadge b{position:absolute;left:0;right:0;top:44px;text-align:center;font:800 22px/1 var(--display);letter-spacing:1px;color:#fff;
+  text-shadow:0 1px 0 #000}
 .slabel>div{position:absolute;left:50%;top:50%;width:580px;transform:translate(-50%,-50%) rotate(-90deg);display:flex;align-items:center;justify-content:center;white-space:nowrap}
 .num{display:flex;align-items:center;justify-content:center;font:800 30px/1 var(--display)}
 .sq{position:relative;display:flex;align-items:center;justify-content:center;padding:11px 3px}
@@ -2061,12 +2061,28 @@ function boardBlock(b, mg, ctx) {
 
 // League mark for the board's top-left corner: real logos for pro leagues, a text badge for college
 const LEAGUE_LOGOS = { "NFL": "nfl", "NBA": "nba", "WNBA": "wnba", "MLB": "mlb", "NHL": "nhl", "MLS": "mls" };
-const COLLEGE_BADGE = { "College Football": ["COLLEGE", "FOOTBALL"], "Men's College Basketball": ["COLLEGE", "BASKETBALL"],
-  "Women's College Basketball": ["WOMEN'S", "COLLEGE HOOPS"] };
+// College badge: our own design (a gold-edged shield with a ball), not the NCAA's logo
+const COLLEGE_BADGE = { "College Football": ["NCAAF", "football"], "Men's College Basketball": ["NCAAM", "basketball"],
+  "Women's College Basketball": ["NCAAW", "basketball"] };
+const BADGE_BALL = {
+  football: '<ellipse cx="50" cy="27" rx="15" ry="8.5" fill="#8A4A1F" stroke="#5A2E10" stroke-width="1.5"/>' +
+    '<path d="M38 22.5c3 1.6 3 7.4 0 9M62 22.5c-3 1.6-3 7.4 0 9" stroke="#fff" stroke-width="1.6" fill="none"/>' +
+    '<path d="M43 27h14" stroke="#fff" stroke-width="1.6"/><path d="M45 24.6v4.8M48.3 24.6v4.8M51.7 24.6v4.8M55 24.6v4.8" stroke="#fff" stroke-width="1.3"/>',
+  basketball: '<circle cx="50" cy="27" r="10" fill="#E8742A" stroke="#7A3A12" stroke-width="1.5"/>' +
+    '<path d="M40 27h20M50 17v20M43 20c4 4 4 10 0 14M57 20c-4 4-4 10 0 14" stroke="#4A230B" stroke-width="1.3" fill="none"/>'
+};
 function leagueMark(league) {
   if (LEAGUE_LOGOS[league]) return h("img", { class: "lgmark", src: `https://a.espncdn.com/i/teamlogos/leagues/500/${LEAGUE_LOGOS[league]}.png`, alt: league, crossorigin: "anonymous" });
   const t = COLLEGE_BADGE[league];
-  return t ? h("div", { class: "lgbadge" }, h("span", {}, t[0]), h("b", {}, t[1])) : null;
+  if (!t) return null;
+  const wrap = h("div", { class: "lgbadge", "aria-label": t[0] });
+  wrap.innerHTML = '<svg viewBox="0 0 100 90" aria-hidden="true"><defs><linearGradient id="bdg" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0" stop-color="#3A2E26"/><stop offset="1" stop-color="#141110"/></linearGradient></defs>' +
+    '<polygon points="25,3 75,3 97,45 75,87 25,87 3,45" fill="url(#bdg)" stroke="#F2B61D" stroke-width="4"/>' +
+    '<polygon points="28,9 72,9 90,45 72,81 28,81 10,45" fill="none" stroke="#C9C9C9" stroke-width="1.2" opacity=".7"/>' +
+    BADGE_BALL[t[1]] + '</svg>';
+  wrap.append(h("b", {}, t[0]));
+  return wrap;
 }
 const teamLogo = url => url && h("img", { class: "tlogo", src: url, alt: "", crossorigin: "anonymous" });
 // Find ESPN logos for a board's teams and save them (only exact school or team names match)
