@@ -150,6 +150,14 @@ h2{font:700 20px/1.2 var(--ui);margin:28px 0 10px}
 .tlabel{grid-column:3/13;grid-row:1;display:flex;align-items:center;justify-content:center;padding:0 10px;border-right-width:2px !important;overflow:hidden}
 .team{font:800 40px/1 var(--display);text-transform:uppercase;letter-spacing:1px;white-space:nowrap}
 .slabel{grid-column:1;grid-row:3/13;position:relative;overflow:hidden;border-bottom-width:2px !important}
+.tlabel .tlogo{height:40px;width:40px;object-fit:contain;margin-right:10px;flex-shrink:0}
+.slabel .tlogo{height:40px;width:40px;object-fit:contain;margin-right:10px;flex-shrink:0;transform:rotate(90deg)}
+.corner{display:flex;align-items:center;justify-content:center;overflow:hidden}
+.corner .lgmark{max-width:82%;max-height:82%;object-fit:contain}
+.lgbadge{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:86%;padding:9px 3px;border-radius:9px;background:#1D1D1D;color:#fff;
+  box-shadow:inset 0 0 0 2px #C9C9C9;text-align:center;line-height:1}
+.lgbadge span{font:700 10px/1 var(--ui);letter-spacing:1px}
+.lgbadge b{font:800 17px/1 var(--display);letter-spacing:.4px}
 .slabel>div{position:absolute;left:50%;top:50%;width:580px;transform:translate(-50%,-50%) rotate(-90deg);display:flex;align-items:center;justify-content:center;white-space:nowrap}
 .num{display:flex;align-items:center;justify-content:center;font:800 30px/1 var(--display)}
 .sq{position:relative;display:flex;align-items:center;justify-content:center;padding:11px 3px}
@@ -2005,7 +2013,7 @@ function boardBlock(b, mg, ctx) {
     cur.replaceWith(nw);
     requestAnimationFrame(fitBoards);
   };
-  const sheet = renderSheet(b, editable, refresh, slotsFor(ctx?.league));
+  const sheet = renderSheet(b, editable, refresh, slotsFor(ctx?.league), ctx?.league);
   block.append(
     h("div", { class: "bar" },
       h("span", { class: "status " + (b.locked ? "locked" : "open") }, b.locked ? "Locked" : "Open"),
@@ -2047,7 +2055,31 @@ function boardBlock(b, mg, ctx) {
   return block;
 }
 
-function renderSheet(b, editable, refresh, slots = SLOTS) {
+// League mark for the board's top-left corner: real logos for pro leagues, a text badge for college
+const LEAGUE_LOGOS = { "NFL": "nfl", "NBA": "nba", "WNBA": "wnba", "MLB": "mlb", "NHL": "nhl", "MLS": "mls" };
+const COLLEGE_BADGE = { "College Football": ["COLLEGE", "FOOTBALL"], "Men's College Basketball": ["COLLEGE", "BASKETBALL"],
+  "Women's College Basketball": ["WOMEN'S", "COLLEGE HOOPS"] };
+function leagueMark(league) {
+  if (LEAGUE_LOGOS[league]) return h("img", { class: "lgmark", src: `https://a.espncdn.com/i/teamlogos/leagues/500/${LEAGUE_LOGOS[league]}.png`, alt: league, crossorigin: "anonymous" });
+  const t = COLLEGE_BADGE[league];
+  return t ? h("div", { class: "lgbadge" }, h("span", {}, t[0]), h("b", {}, t[1])) : null;
+}
+const teamLogo = url => url && h("img", { class: "tlogo", src: url, alt: "", crossorigin: "anonymous" });
+// Find ESPN logos for a board's teams and save them (only exact school or team names match)
+async function attachLogos(row, league, refresh) {
+  if (!row || !ESPN_LEAGUES.includes(league)) return row;
+  try {
+    const { data } = await sb.functions.invoke("pull-scores", { body: { team_logos: { league, names: [row.top_team, row.side_team] } } });
+    const top = data?.logos?.[row.top_team] || null, side = data?.logos?.[row.side_team] || null;
+    if (top === (row.top_logo || null) && side === (row.side_logo || null)) return row;
+    const saved = must(await sb.from("boards").update({ top_logo: top, side_logo: side }).eq("id", row.id).select());
+    const out = saved[0] || { ...row, top_logo: top, side_logo: side };
+    if (refresh) refresh(out);
+    return out;
+  } catch { return row; }   // logos are a nice-to-have; the board works without them
+}
+
+function renderSheet(b, editable, refresh, slots = SLOTS, league = "") {
   const win = winners(b, slots), sc = b.scores || {};
   const clickable = fn => editable ? {
     role: "button", tabindex: "0", onclick: fn,
@@ -2058,9 +2090,9 @@ function renderSheet(b, editable, refresh, slots = SLOTS) {
   const numStyle = (c, axis, last) => `background:${c};color:${textOn(c)};` + (last ? "" :
     (axis === "top" ? `border-right:2px solid ${divider(c)}` : `border-bottom:2px solid ${divider(c)}`));
   const grid = h("div", { class: "grid" },
-    h("div", { class: "corner" }),
-    h("div", { class: "tlabel" }, h("span", { class: "team", style: "color:" + b.top_color }, b.top_team)),
-    h("div", { class: "slabel" }, h("div", {}, h("span", { class: "team", style: "color:" + b.side_color }, b.side_team)))
+    h("div", { class: "corner" }, leagueMark(league)),
+    h("div", { class: "tlabel" }, teamLogo(b.top_logo), h("span", { class: "team", style: "color:" + b.top_color }, b.top_team)),
+    h("div", { class: "slabel" }, h("div", {}, teamLogo(b.side_logo), h("span", { class: "team", style: "color:" + b.side_color }, b.side_team)))
   );
   for (let i = 0; i < 10; i++) {
     grid.append(h("div", {
@@ -2187,7 +2219,8 @@ async function addBoard(set, count, pre = {}, onDone = null) {
   const v = await modal({ title: "Add board", fields: detailFields({ sport, ...pre }, set.weeks?.league), ok: "Add board", after: wireTeams });
   if (!v) return;
   try {
-    const row = must(await sb.from("boards").insert({ set_id: set.id, sort_order: count, ...cleanDetails(v, set.weeks?.league) }).select().single());
+    let row = must(await sb.from("boards").insert({ set_id: set.id, sort_order: count, ...cleanDetails(v, set.weeks?.league) }).select().single());
+    row = await attachLogos(row, set.weeks?.league);
     onDone ? await onDone(row) : route();
   } catch (e) { toast(e.message, true); }
 }
@@ -2199,7 +2232,7 @@ async function editDetails(b, refresh, league) {
   try {
     const rows = must(await sb.from("boards").update(cleanDetails(v, league)).eq("id", b.id).select());
     if (!rows.length) return toast("Board is locked or you don't have edit rights.", true);
-    refresh(rows[0]);
+    refresh(await attachLogos(rows[0], league));
   } catch (e) { toast(e.message, true); }
 }
 
