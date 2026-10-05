@@ -149,6 +149,7 @@ h2{font:700 20px/1.2 var(--ui);margin:28px 0 10px}
 .corner{grid-column:1/3;grid-row:1/3}
 .tlabel{grid-column:3/13;grid-row:1;display:flex;align-items:center;justify-content:center;padding:0 10px;border-right-width:2px !important;overflow:hidden}
 .team{font:800 40px/1 var(--display);text-transform:uppercase;letter-spacing:1px;white-space:nowrap}
+.team.fx{font-weight:400;font-size:34px;letter-spacing:0;text-transform:none}
 .slabel{grid-column:1;grid-row:3/13;position:relative;overflow:hidden;border-bottom-width:2px !important}
 .tlabel .tlogo{height:40px;width:40px;object-fit:contain;margin-right:10px;flex-shrink:0}
 .slabel .tlogo{height:40px;width:40px;object-fit:contain;margin-right:10px;flex-shrink:0;transform:rotate(90deg)}
@@ -932,19 +933,21 @@ function viewLogin(mode = "signin") {
 
 // Name shown on boards: "what to call you" if given, otherwise first and last name
 const displayName = p => (p?.nickname || "").trim() || [p?.first_name, p?.last_name].map(x => (x || "").trim()).filter(Boolean).join(" ") || p?.email || "";
-async function editName(required = false) {
-  const v = await modal({ title: required ? "Add your name" : "Your name",
-    text: "This shows as the manager on boards you create.",
+async function editName(required = false, who = S.me) {
+  const self = who?.id === S.me?.id;
+  const v = await modal({ title: required ? "Add your name" : self ? "Your name" : `${displayName(who)}'s name`,
+    text: self ? "This shows as the manager on boards you create." : "This changes their name everywhere it shows.",
     fields: [
-      { name: "first_name", label: "First name", value: S.me?.first_name || "", required: true, maxlength: 40, half: true, autocomplete: "given-name" },
-      { name: "last_name", label: "Last name", value: S.me?.last_name || "", required: true, maxlength: 40, half: true, autocomplete: "family-name" },
-      { name: "nickname", label: "What should we call you? (optional)", value: S.me?.nickname || "", maxlength: 40, autocomplete: "nickname" }
+      { name: "first_name", label: "First name", value: who?.first_name || "", required: true, maxlength: 40, half: true, autocomplete: "given-name" },
+      { name: "last_name", label: "Last name", value: who?.last_name || "", required: true, maxlength: 40, half: true, autocomplete: "family-name" },
+      { name: "nickname", label: self ? "What should we call you? (optional)" : "Nickname (optional)", value: who?.nickname || "", maxlength: 40, autocomplete: "nickname" }
     ], ok: "Save" });
   if (!v) return;
   const row = { first_name: v.first_name.trim(), last_name: v.last_name.trim(), nickname: v.nickname.trim() };
   if (!row.first_name || !row.last_name) return toast("Enter your first and last name.", true);
   try {
-    must(await sb.from("profiles").update(row).eq("id", S.me.id));
+    const saved = must(await sb.from("profiles").update(row).eq("id", who.id).select());
+    if (!saved.length) return toast("That name couldn't be changed. Only the Board Master can edit the Board Master.", true);
     await loadMe(); route(); toast("Name saved");
   } catch (e) { toast(e.message, true); }
 }
@@ -1150,6 +1153,7 @@ async function viewPeople() {
                  toast(!p.playoffs_addon ? `${p.display_name} has the Playoffs add-on` : `${p.display_name} no longer has the Playoffs add-on`); })))]],
       // Actions
       h("div", { class: "plinks" },
+        (!p.is_owner || S.me.is_owner) && h("a", { class: "linkbtn", href: p.id === S.me.id ? "#/me" : "#/me?u=" + p.id }, "Edit profile and squares"),
         h("button", { type: "button", class: "linkbtn", onclick: async () => {
           const { error } = await sb.auth.resetPasswordForEmail(p.email, { redirectTo: link("#/") });
           toast(error ? error.message : `Reset email sent to ${p.email}`, !!error);
@@ -2080,6 +2084,10 @@ async function attachLogos(row, league, refresh) {
 }
 
 function renderSheet(b, editable, refresh, slots = SLOTS, league = "") {
+  // Team name font picked on the board (Edit details); block letters when none is picked
+  if (b.team_font) ensureFonts([b.team_font]);
+  const teamFam = b.team_font && fontOf(b.team_font) ? `;font-family:'${fontOf(b.team_font)[2]}',var(--display)` : "";
+  const teamFx = teamFam ? " fx" : "";
   const win = winners(b, slots), sc = b.scores || {};
   const clickable = fn => editable ? {
     role: "button", tabindex: "0", onclick: fn,
@@ -2091,8 +2099,8 @@ function renderSheet(b, editable, refresh, slots = SLOTS, league = "") {
     (axis === "top" ? `border-right:2px solid ${divider(c)}` : `border-bottom:2px solid ${divider(c)}`));
   const grid = h("div", { class: "grid" },
     h("div", { class: "corner" }, leagueMark(league)),
-    h("div", { class: "tlabel" }, teamLogo(b.top_logo), h("span", { class: "team", style: "color:" + b.top_color }, b.top_team)),
-    h("div", { class: "slabel" }, h("div", {}, teamLogo(b.side_logo), h("span", { class: "team", style: "color:" + b.side_color }, b.side_team)))
+    h("div", { class: "tlabel" }, teamLogo(b.top_logo), h("span", { class: "team" + teamFx, style: "color:" + b.top_color + teamFam }, b.top_team)),
+    h("div", { class: "slabel" }, h("div", {}, teamLogo(b.side_logo), h("span", { class: "team" + teamFx, style: "color:" + b.side_color + teamFam }, b.side_team)))
   );
   for (let i = 0; i < 10; i++) {
     grid.append(h("div", {
@@ -2193,6 +2201,8 @@ function detailFields(b = {}, league) {
     { name: "top_color", label: "Top team color", type: "color", value: b.top_color || "#F7941D", half: true },
     { name: "side_team", label: "Side team", value: b.side_team, half: true, maxlength: 40, list: "team-list", placeholder: "Start typing a team" },
     { name: "side_color", label: "Side team color", type: "color", value: b.side_color || "#FFE14D", half: true },
+    { name: "team_font", label: "Team name font", value: b.team_font || "board",
+      options: [{ value: "board", label: "Board (block letters)" }, ...SQ_FONTS.map(([k, label, fam]) => ({ value: k, label: `${label} (${fam})` }))] },
     { name: "kickoff", label: "Kickoff line", value: b.kickoff, placeholder: "2:30 kickoff", maxlength: 60 },
     { name: "price", label: "Points per square", type: "number", step: "1", min: 0, inputmode: "numeric", value: b.price ?? 6, half: true },
     ...(halves ? [] : [{ name: "q1", label: "Q1 points", type: "number", step: "1", min: 0, inputmode: "numeric", value: b.q1 ?? 125, half: true }]),
@@ -2210,7 +2220,8 @@ function cleanDetails(v, league) {
   const num = x => { const n = Number(x); return Number.isFinite(n) && n >= 0 ? n : 0; };
   if (isHalves(league)) { v.q1 = 0; v.q3 = 0; }   // halves only: no Q1 or Q3 payout
   return { sport: v.sport.trim(), top_team: v.top_team.trim(), top_color: v.top_color, side_team: v.side_team.trim(), side_color: v.side_color,
-    kickoff: v.kickoff.trim(), price: num(v.price), q1: num(v.q1), q2: num(v.q2), q3: num(v.q3), final: num(v.final), footer: v.footer.trim() };
+    kickoff: v.kickoff.trim(), price: num(v.price), q1: num(v.q1), q2: num(v.q2), q3: num(v.q3), final: num(v.final), footer: v.footer.trim(),
+    team_font: v.team_font && v.team_font !== "board" && fontOf(v.team_font) ? v.team_font : null };
 }
 
 async function addBoard(set, count, pre = {}, onDone = null) {
@@ -2891,10 +2902,20 @@ async function uploadPhoto(file, forSquare = false) {
 
 // My profile: name, and my saved squares for each community I'm in
 async function viewProfile() {
-  const want = new URLSearchParams(location.hash.split("?")[1] || "").get("c");
-  const joined = must(await sb.rpc("my_member_communities")) || [];
+  const qs = new URLSearchParams(location.hash.split("?")[1] || "");
+  const want = qs.get("c");
+  // The Board Master and super admins can open anyone's profile (#/me?u=<id>)
+  const uid = qs.get("u");
+  let P = S.me;
+  if (uid && uid !== S.me.id) {
+    if (!S.me?.is_owner && !isSuper()) throw new Error("Only the Board Master or a super admin can edit other profiles.");
+    P = must(await sb.from("profiles").select("*").eq("id", uid).maybeSingle());
+    if (!P) throw new Error("That person wasn't found.");
+  }
+  const other = P.id !== S.me.id;
+  const joined = other ? [] : (must(await sb.rpc("my_member_communities")) || []);
   // You, Super admins and Commissioners can use every community without an invite
-  const everywhere = !!S.me?.is_owner || isSuper() || isComm();
+  const everywhere = other || !!S.me?.is_owner || isSuper() || isComm();
   const adm = everywhere ? must(await sb.from("communities").select("id,name"))
     : S.admin.size ? must(await sb.from("communities").select("id,name").in("id", [...S.admin])) : [];
   const comms = [...joined, ...adm.filter(a => !joined.some(j => j.id === a.id))].sort((a, b) => a.name.localeCompare(b.name));
@@ -2908,11 +2929,11 @@ async function viewProfile() {
     const all = must(await sb.from("square_defaults").select("id,user_id,league,square,display_name,saved_for,font,avatar_url").eq("community_id", cid));
     ensureFonts(SQ_FONTS.map(f => f[0]));
     const cap = (must(await sb.from("communities").select("saved_cap").eq("id", cid).maybeSingle()) || {}).saved_cap ?? 30;
-    const mineAll = all.filter(x => x.user_id === S.me.id);
+    const mineAll = all.filter(x => x.user_id === P.id);
     box.replaceChildren(h("div", { class: "sqgrid" }, SQUARE_LEAGUES.map(([lg, short]) => {
       let rows = mineAll.filter(x => x.league === lg).map(x => ({ square: x.square, name: x.display_name, font: x.font || "classic", avatar: x.avatar_url || null }));
       const had = rows.length > 0;   // so turning a league off can still be saved
-      const others = all.filter(x => x.league === lg && x.user_id !== S.me.id);
+      const others = all.filter(x => x.league === lg && x.user_id !== P.id);
       // Only empty squares can be picked. Squares saved for someone else (even with no login yet) are taken;
       // an admin hands those over on the Players tab.
       const claimable = [];
@@ -2927,7 +2948,7 @@ async function viewProfile() {
           h("div", { class: "sqhead" }, h("b", {}, short), h("span", { class: "meta" }, `${lg} · ${taken.length + rows.length} of ${cap} saved`),
             h("button", { type: "button", class: "mtog" + (on ? " on" : ""), role: "switch", "aria-checked": on ? "true" : "false", "aria-label": `${lg} squares`,
               onclick: () => { if (!on && room() < 1) return toast(`Saved squares are full for ${short} (${cap} of ${cap}).`, true);
-                rows = on ? [] : [{ square: null, name: S.me.square_name || displayName(S.me), font: "classic", avatar: null }]; draw(); } }, h("span", { class: "oknob" }))),
+                rows = on ? [] : [{ square: null, name: P.square_name || displayName(P), font: "classic", avatar: null }]; draw(); } }, h("span", { class: "oknob" }))),
           on && rows.map((r, i) => {
             const sel = h("select", { "aria-label": `${short} square` }, h("option", { value: "" }, "Square"),
               Array.from({ length: 100 }, (_, k) => k + 1).map(n => {
@@ -2955,7 +2976,7 @@ async function viewProfile() {
               fileIn);
           }),
           on && h("div", { class: "actions", style: "margin:6px 0 0" }, room() > 0
-            ? h("button", { type: "button", class: "linkbtn", onclick: () => { rows.push({ square: null, name: rows[0]?.name || S.me.square_name || displayName(S.me), font: rows[0]?.font || "classic", avatar: rows[0]?.avatar || null }); draw(); } }, "+ Add square")
+            ? h("button", { type: "button", class: "linkbtn", onclick: () => { rows.push({ square: null, name: rows[0]?.name || P.square_name || displayName(P), font: rows[0]?.font || "classic", avatar: rows[0]?.avatar || null }); draw(); } }, "+ Add square")
             : h("span", { class: "meta" }, `Full: ${cap} of ${cap} saved squares used.`)),
           (on || had) && h("div", { class: "actions", style: "margin:8px 0 0" }, btn("Save " + short, async () => {
             if (rows.some(r => !r.square || !r.name.trim())) return toast("Pick a square and a name for each row.", true);
@@ -2976,9 +2997,9 @@ async function viewProfile() {
                 const look = { font: r.font === "classic" ? null : r.font, avatar_url: r.avatar || null };
                 if (mine) must(await sb.from("square_defaults").update({ display_name: r.name.trim(), ...look }).eq("id", mine.id));
                 else if (claim) {
-                  const done = must(await sb.from("square_defaults").update({ user_id: S.me.id, display_name: r.name.trim(), ...look }).eq("id", claim.id).select());
+                  const done = must(await sb.from("square_defaults").update({ user_id: P.id, display_name: r.name.trim(), ...look }).eq("id", claim.id).select());
                   if (!done.length) throw new Error(`Square ${r.square} couldn't be claimed. Refresh and try again.`);
-                } else must(await sb.from("square_defaults").insert({ community_id: cid, user_id: S.me.id, league: lg, square: r.square, display_name: r.name.trim(), ...look }));
+                } else must(await sb.from("square_defaults").insert({ community_id: cid, user_id: P.id, league: lg, square: r.square, display_name: r.name.trim(), ...look }));
               }
               toast(`${short} squares saved`); load();
             } catch (e) { toast(/duplicate|unique/i.test(e.message) ? "Someone just took one of those squares. Pick another." : e.message, true); load(); }
@@ -2990,10 +3011,11 @@ async function viewProfile() {
     })));
   }
   render(
-    h("div", { class: "crumbs" }, h("a", { href: "#/" }, "Home")),
-    h("h1", {}, "My profile"),
-    h("div", { class: "panel lookname" }, h("div", {}, h("b", {}, displayName(S.me)), h("div", { class: "meta" }, S.me.email || "")),
-      h("button", { type: "button", class: "linkbtn", onclick: () => editName() }, "Change name")),
+    h("div", { class: "crumbs" }, other ? h("a", { href: "#/people" }, "People") : h("a", { href: "#/" }, "Home")),
+    h("h1", {}, other ? `${displayName(P)}'s profile` : "My profile"),
+    other && h("p", { class: "practice", style: "margin:0 0 10px" }, h("b", {}, "Editing someone else's profile. "), h("span", {}, "Changes save to their account.")),
+    h("div", { class: "panel lookname" }, h("div", {}, h("b", {}, displayName(P)), h("div", { class: "meta" }, P.email || "")),
+      h("button", { type: "button", class: "linkbtn", onclick: () => editName(false, P) }, "Change name")),
     h("h2", {}, "Default square positions"),
     h("p", { class: "meta" }, "Your squares fill in on every new board in that league, in the font you pick. Tap the little square to add a photo."),
     pickC && h("div", { class: "actions" }, pickC),
