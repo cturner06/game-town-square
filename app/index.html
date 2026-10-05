@@ -150,9 +150,13 @@ h2{font:700 20px/1.2 var(--ui);margin:28px 0 10px}
 .tlabel{grid-column:3/13;grid-row:1;display:flex;align-items:center;justify-content:center;padding:0 10px;border-right-width:2px !important;overflow:hidden}
 .team{font:800 40px/1 var(--display);text-transform:uppercase;letter-spacing:1px;white-space:nowrap}
 .team.fx{font-weight:400;font-size:34px;letter-spacing:0;text-transform:none}
+.teamsample{margin-top:6px;padding:8px 10px;border-radius:10px;background:#fff;box-shadow:inset 0 0 0 1px #DDD4C8;font:800 26px/1.15 var(--display);
+  letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
+.teamsample.fx{font-weight:400;letter-spacing:0;font-size:24px}
 .slabel{grid-column:1;grid-row:3/13;position:relative;overflow:hidden;border-bottom-width:2px !important}
 .tlabel .tlogo{height:40px;width:40px;object-fit:contain;margin-right:10px;flex-shrink:0}
 .slabel .tlogo{height:40px;width:40px;object-fit:contain;margin-right:10px;flex-shrink:0;transform:rotate(90deg)}
+.tlabel .tlogo.r,.slabel .tlogo.r{margin-right:0;margin-left:10px}
 .corner{display:flex;align-items:center;justify-content:center;overflow:hidden}
 .corner .lgmark{max-width:82%;max-height:82%;object-fit:contain}
 .lgbadge{position:relative;width:88px;height:79px}
@@ -2084,16 +2088,19 @@ function leagueMark(league) {
   wrap.append(h("b", {}, t[0]));
   return wrap;
 }
-const teamLogo = url => url && h("img", { class: "tlogo", src: url, alt: "", crossorigin: "anonymous" });
+const teamLogo = (url, side = "") => url && h("img", { class: "tlogo" + (side ? " " + side : ""), src: url, alt: "", crossorigin: "anonymous" });
 // Find ESPN logos for a board's teams and save them (only exact school or team names match)
 async function attachLogos(row, league, refresh) {
   if (!row || !ESPN_LEAGUES.includes(league)) return row;
   try {
     const { data } = await sb.functions.invoke("pull-scores", { body: { team_logos: { league, names: [row.top_team, row.side_team] } } });
     const top = data?.logos?.[row.top_team] || null, side = data?.logos?.[row.side_team] || null;
-    if (top === (row.top_logo || null) && side === (row.side_logo || null)) return row;
-    const saved = must(await sb.from("boards").update({ top_logo: top, side_logo: side }).eq("id", row.id).select());
-    const out = saved[0] || { ...row, top_logo: top, side_logo: side };
+    // Second logo for the other side of the name: the team's secondary logo, or the primary again when it has none
+    const top2 = top ? (data?.alt?.[row.top_team] || top) : null, side2 = side ? (data?.alt?.[row.side_team] || side) : null;
+    const patch = { top_logo: top, side_logo: side, top_logo2: top2, side_logo2: side2 };
+    if (Object.keys(patch).every(k => patch[k] === (row[k] || null))) return row;
+    const saved = must(await sb.from("boards").update(patch).eq("id", row.id).select());
+    const out = saved[0] || { ...row, ...patch };
     if (refresh) refresh(out);
     return out;
   } catch { return row; }   // logos are a nice-to-have; the board works without them
@@ -2101,9 +2108,9 @@ async function attachLogos(row, league, refresh) {
 
 function renderSheet(b, editable, refresh, slots = SLOTS, league = "") {
   // Team name font picked on the board (Edit details); block letters when none is picked
-  if (b.team_font) ensureFonts([b.team_font]);
-  const teamFam = b.team_font && fontOf(b.team_font) ? `;font-family:'${fontOf(b.team_font)[2]}',var(--display)` : "";
-  const teamFx = teamFam ? " fx" : "";
+  ensureFonts([b.team_font, b.side_font].filter(Boolean));
+  const fam = k => k && fontOf(k) ? `;font-family:'${fontOf(k)[2]}',var(--display)` : "";
+  const fx = k => k && fontOf(k) ? " fx" : "";
   const win = winners(b, slots), sc = b.scores || {};
   const clickable = fn => editable ? {
     role: "button", tabindex: "0", onclick: fn,
@@ -2115,8 +2122,8 @@ function renderSheet(b, editable, refresh, slots = SLOTS, league = "") {
     (axis === "top" ? `border-right:2px solid ${divider(c)}` : `border-bottom:2px solid ${divider(c)}`));
   const grid = h("div", { class: "grid" },
     h("div", { class: "corner" }, leagueMark(league)),
-    h("div", { class: "tlabel" }, teamLogo(b.top_logo), h("span", { class: "team" + teamFx, style: "color:" + b.top_color + teamFam }, b.top_team)),
-    h("div", { class: "slabel" }, h("div", {}, teamLogo(b.side_logo), h("span", { class: "team" + teamFx, style: "color:" + b.side_color + teamFam }, b.side_team)))
+    h("div", { class: "tlabel" }, teamLogo(b.top_logo), h("span", { class: "team" + fx(b.team_font), style: "color:" + b.top_color + fam(b.team_font) }, b.top_team), teamLogo(b.top_logo2 || b.top_logo, "r")),
+    h("div", { class: "slabel" }, h("div", {}, teamLogo(b.side_logo), h("span", { class: "team" + fx(b.side_font), style: "color:" + b.side_color + fam(b.side_font) }, b.side_team), teamLogo(b.side_logo2 || b.side_logo, "r")))
   );
   for (let i = 0; i < 10; i++) {
     grid.append(h("div", {
@@ -2209,6 +2216,7 @@ async function editNumber(b, axis, idx, refresh) {
   catch (e) { toast(e.message, true); }
 }
 
+const TEAM_FONT_OPTS = () => [{ value: "board", label: "Block letters" }, ...SQ_FONTS.map(([k, label, fam]) => ({ value: k, label: `${label} (${fam})` }))];
 function detailFields(b = {}, league) {
   const halves = isHalves(league);
   return [
@@ -2217,8 +2225,8 @@ function detailFields(b = {}, league) {
     { name: "top_color", label: "Top team color", type: "color", value: b.top_color || "#F7941D", half: true },
     { name: "side_team", label: "Side team", value: b.side_team, half: true, maxlength: 40, list: "team-list", placeholder: "Start typing a team" },
     { name: "side_color", label: "Side team color", type: "color", value: b.side_color || "#FFE14D", half: true },
-    { name: "team_font", label: "Team name font", value: b.team_font || "board",
-      options: [{ value: "board", label: "Board (block letters)" }, ...SQ_FONTS.map(([k, label, fam]) => ({ value: k, label: `${label} (${fam})` }))] },
+    { name: "team_font", label: "Top team font", value: b.team_font || "board", half: true, options: TEAM_FONT_OPTS() },
+    { name: "side_font", label: "Side team font", value: b.side_font || "board", half: true, options: TEAM_FONT_OPTS() },
     { name: "kickoff", label: "Kickoff line", value: b.kickoff, placeholder: "2:30 kickoff", maxlength: 60 },
     { name: "price", label: "Points per square", type: "number", step: "1", min: 0, inputmode: "numeric", value: b.price ?? 6, half: true },
     ...(halves ? [] : [{ name: "q1", label: "Q1 points", type: "number", step: "1", min: 0, inputmode: "numeric", value: b.q1 ?? 125, half: true }]),
@@ -2231,13 +2239,32 @@ function detailFields(b = {}, league) {
 function wireTeams(inputs) {
   wireTeamLookup(inputs, "top_team", "top_color");
   wireTeamLookup(inputs, "side_team", "side_color");
+  // Sample of each team name in its font and color, right under its font picker
+  ensureFonts(SQ_FONTS.map(f => f[0]));
+  for (const [fontKey, teamKey, colorKey] of [["team_font", "top_team", "top_color"], ["side_font", "side_team", "side_color"]]) {
+    const sel = inputs[fontKey];
+    if (!sel) continue;
+    const sample = h("div", { class: "teamsample", "aria-live": "polite" });
+    const upd = () => {
+      const k = sel.value, name = inputs[teamKey]?.value.trim() || (teamKey === "top_team" ? "Top team" : "Side team");
+      sample.textContent = k === "board" ? name.toUpperCase() : name;
+      sample.style.color = inputs[colorKey]?.value || "#1D1D1D";
+      sample.style.fontFamily = k === "board" ? "var(--display)" : `'${fontOf(k)[2]}', var(--display)`;
+      sample.classList.toggle("fx", k !== "board");
+    };
+    (sel.closest("label") || sel.parentElement).append(sample);
+    [sel, inputs[teamKey], inputs[colorKey]].forEach(el => el && el.addEventListener("input", upd));
+    sel.addEventListener("change", upd);
+    upd();
+  }
 }
 function cleanDetails(v, league) {
   const num = x => { const n = Number(x); return Number.isFinite(n) && n >= 0 ? n : 0; };
   if (isHalves(league)) { v.q1 = 0; v.q3 = 0; }   // halves only: no Q1 or Q3 payout
   return { sport: v.sport.trim(), top_team: v.top_team.trim(), top_color: v.top_color, side_team: v.side_team.trim(), side_color: v.side_color,
     kickoff: v.kickoff.trim(), price: num(v.price), q1: num(v.q1), q2: num(v.q2), q3: num(v.q3), final: num(v.final), footer: v.footer.trim(),
-    team_font: v.team_font && v.team_font !== "board" && fontOf(v.team_font) ? v.team_font : null };
+    team_font: v.team_font && v.team_font !== "board" && fontOf(v.team_font) ? v.team_font : null,
+    side_font: v.side_font && v.side_font !== "board" && fontOf(v.side_font) ? v.side_font : null };
 }
 
 async function addBoard(set, count, pre = {}, onDone = null) {
