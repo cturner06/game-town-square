@@ -409,6 +409,7 @@ main.wide{max-width:1400px}
 .lookname{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 0 10px;margin:0 0 12px;border-bottom:1px solid var(--line)}
 .lookname .meta{font-size:13px;overflow:hidden;text-overflow:ellipsis}
 .lookname > div{min-width:0}
+.panel.lookname{padding:12px 14px;margin:0 0 6px;border-bottom:0}
 .lookname .linkbtn{white-space:nowrap}
 .lookrow{flex-wrap:nowrap !important}
 .bigprev{position:relative;flex-shrink:0;width:96px;height:96px;border:2px solid #1D1D1D;background:#fff;color:#1D1D1D;display:flex;align-items:center;justify-content:center;padding:6px;box-sizing:border-box}
@@ -436,7 +437,16 @@ main.wide{max-width:1400px}
 .sqhead{display:flex;align-items:center;gap:10px}
 .sqhead b{font-size:17px;min-width:62px}
 .sqhead .meta{flex:1;min-width:0;font-size:13px}
-.sqedit{display:grid;grid-template-columns:96px minmax(0,1fr) 32px;gap:8px;align-items:center;margin-top:8px}
+.sqedit{display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;align-items:start;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.minisq{position:relative;width:72px;height:72px;border:2px solid #1D1D1D;background:#fff;color:#1D1D1D;display:flex;align-items:center;justify-content:center;padding:4px;box-sizing:border-box;cursor:pointer;font:inherit}
+.minisq .nm{font-size:15px;line-height:1.05;text-align:center;overflow:hidden;overflow-wrap:anywhere;max-height:34px}
+.minisq .sqav{position:absolute;right:3px;top:3px;width:18px;height:18px;border-radius:50%;object-fit:cover}
+.minisq .addph{position:absolute;left:3px;top:2px;font:700 9px/1 var(--ui);color:#8A8A8A}
+.minisq .no{position:absolute;right:3px;bottom:2px;font:600 10px/1 var(--ui);color:#555}
+.sqfields{display:grid;grid-template-columns:84px minmax(0,1fr);gap:6px;min-width:0}
+.sqfields select,.sqfields input{width:100%;box-sizing:border-box;min-width:0;min-height:40px;border-radius:10px;border:1px solid var(--line-2);background:var(--card);color:var(--chalk);font:inherit;padding:0 8px}
+.sqacts{display:flex;justify-content:flex-end;gap:14px;align-items:center}
+.sqacts .linkbtn{min-height:32px;padding:2px 0;font-size:13px}
 .sqedit select,.sqedit input{width:100%;box-sizing:border-box;min-width:0}
 .sqleague{min-width:0}
 .sqedit select,.sqedit input,.sqrow select{min-height:42px;border-radius:10px;border:1px solid var(--line-2);background:var(--card);color:var(--chalk);font:inherit;padding:0 10px}
@@ -2827,16 +2837,18 @@ function squareLook() {
   return wrap;
 }
 // Photo upload: cropped to a square and shrunk to 256 x 256 before it leaves the phone
-async function uploadPhoto(file) {
+async function uploadPhoto(file, forSquare = false) {
   try {
     const img = await createImageBitmap(file);
     const side = Math.min(img.width, img.height), cv = document.createElement("canvas");
     cv.width = cv.height = 256;
     cv.getContext("2d").drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, 256, 256);
     const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.85));
-    const { error } = await sb.storage.from("avatars").upload(S.me.id + ".jpg", blob, { upsert: true, contentType: "image/jpeg", cacheControl: "3600" });
+    const path = forSquare ? `${S.me.id}/${Date.now()}.jpg` : S.me.id + ".jpg";
+    const { error } = await sb.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg", cacheControl: "3600" });
     if (error) throw error;
-    const url = sb.storage.from("avatars").getPublicUrl(S.me.id + ".jpg").data.publicUrl + "?v=" + Date.now();
+    const url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl + (forSquare ? "" : "?v=" + Date.now());
+    if (forSquare) { toast("Photo added. Tap Save to keep it."); return url; }
     must(await sb.from("profiles").update({ avatar_url: url }).eq("id", S.me.id));
     await loadMe(); toast("Photo saved");
   } catch (e) { toast(e.message || "That photo didn't upload. Try a JPG or PNG.", true); }
@@ -2858,11 +2870,12 @@ async function viewProfile() {
   if (pickC) pickC.addEventListener("change", () => { cid = pickC.value; load(); });
   async function load() {
     if (!cid) return box.replaceChildren(h("p", { class: "empty" }, "You aren't in a community yet. Use an invite link or a code from an admin."));
-    const all = must(await sb.from("square_defaults").select("id,user_id,league,square,display_name,saved_for").eq("community_id", cid));
+    const all = must(await sb.from("square_defaults").select("id,user_id,league,square,display_name,saved_for,font,avatar_url").eq("community_id", cid));
+    ensureFonts(SQ_FONTS.map(f => f[0]));
     const cap = (must(await sb.from("communities").select("saved_cap").eq("id", cid).maybeSingle()) || {}).saved_cap ?? 30;
     const mineAll = all.filter(x => x.user_id === S.me.id);
     box.replaceChildren(h("div", { class: "sqgrid" }, SQUARE_LEAGUES.map(([lg, short]) => {
-      let rows = mineAll.filter(x => x.league === lg).map(x => ({ square: x.square, name: x.display_name }));
+      let rows = mineAll.filter(x => x.league === lg).map(x => ({ square: x.square, name: x.display_name, font: x.font || "classic", avatar: x.avatar_url || null }));
       const had = rows.length > 0;   // so turning a league off can still be saved
       const others = all.filter(x => x.league === lg && x.user_id !== S.me.id);
       // Only empty squares can be picked. Squares saved for someone else (even with no login yet) are taken;
@@ -2879,7 +2892,7 @@ async function viewProfile() {
           h("div", { class: "sqhead" }, h("b", {}, short), h("span", { class: "meta" }, `${lg} · ${taken.length + rows.length} of ${cap} saved`),
             h("button", { type: "button", class: "mtog" + (on ? " on" : ""), role: "switch", "aria-checked": on ? "true" : "false", "aria-label": `${lg} squares`,
               onclick: () => { if (!on && room() < 1) return toast(`Saved squares are full for ${short} (${cap} of ${cap}).`, true);
-                rows = on ? [] : [{ square: null, name: S.me.square_name || displayName(S.me) }]; draw(); } }, h("span", { class: "oknob" }))),
+                rows = on ? [] : [{ square: null, name: S.me.square_name || displayName(S.me), font: "classic", avatar: null }]; draw(); } }, h("span", { class: "oknob" }))),
           on && rows.map((r, i) => {
             const sel = h("select", { "aria-label": `${short} square` }, h("option", { value: "" }, "Square"),
               Array.from({ length: 100 }, (_, k) => k + 1).map(n => {
@@ -2889,13 +2902,25 @@ async function viewProfile() {
                   theirs ? `${n} · ${ownerOf(n)} (taken)` : claim && n !== r.square ? `${n} · ${ownerOf(n)} (claim)` : mineElsewhere ? `${n} (yours, above)` : String(n));
               }));
             sel.addEventListener("change", () => { r.square = Number(sel.value) || null; draw(); });
-            const nm = h("input", { type: "text", value: r.name, maxlength: 40, "aria-label": `${short} display name`, placeholder: "Display name" });
-            nm.addEventListener("input", () => { r.name = nm.value; });
-            return h("div", { class: "sqedit" }, sel, nm,
-              h("button", { type: "button", class: "linkbtn danger", "aria-label": "Remove this square", onclick: () => { rows.splice(i, 1); draw(); } }, "×"));
+            const pvName = h("span", { class: "nm", style: `font-family:${fontStack(r.font)}` }, r.name.trim() || "Name");
+            const nm = h("input", { type: "text", value: r.name, maxlength: 40, "aria-label": `${short} square name`, placeholder: "Square name" });
+            nm.addEventListener("input", () => { r.name = nm.value; pvName.textContent = r.name.trim() || "Name"; });
+            const fontSel = h("select", { "aria-label": `${short} font` }, SQ_FONTS.map(([k, label]) => h("option", { value: k, selected: k === r.font }, label)));
+            fontSel.addEventListener("change", () => { r.font = fontSel.value; pvName.style.fontFamily = fontStack(r.font); });
+            const fileIn = h("input", { type: "file", accept: "image/*", style: "display:none" });
+            fileIn.addEventListener("change", async () => { const url = fileIn.files[0] && await uploadPhoto(fileIn.files[0], true); if (url) { r.avatar = url; draw(); } });
+            return h("div", { class: "sqedit" },
+              h("button", { type: "button", class: "minisq", "aria-label": r.avatar ? "Change photo" : "Add photo", title: r.avatar ? "Change photo" : "Add photo", onclick: () => fileIn.click() },
+                r.avatar ? h("img", { class: "sqav", src: r.avatar, alt: "" }) : h("span", { class: "addph" }, "+ photo"),
+                pvName, h("span", { class: "no" }, r.square || "")),
+              h("div", { class: "sqfields" }, sel, nm, fontSel,
+                h("div", { class: "sqacts" },
+                  r.avatar && h("button", { type: "button", class: "linkbtn", onclick: () => { r.avatar = null; draw(); } }, "No photo"),
+                  h("button", { type: "button", class: "linkbtn danger", "aria-label": "Remove this square", onclick: () => { rows.splice(i, 1); draw(); } }, "Remove"))),
+              fileIn);
           }),
           on && h("div", { class: "actions", style: "margin:6px 0 0" }, room() > 0
-            ? h("button", { type: "button", class: "linkbtn", onclick: () => { rows.push({ square: null, name: rows[0]?.name || S.me.square_name || displayName(S.me) }); draw(); } }, "+ Add square")
+            ? h("button", { type: "button", class: "linkbtn", onclick: () => { rows.push({ square: null, name: rows[0]?.name || S.me.square_name || displayName(S.me), font: rows[0]?.font || "classic", avatar: rows[0]?.avatar || null }); draw(); } }, "+ Add square")
             : h("span", { class: "meta" }, `Full: ${cap} of ${cap} saved squares used.`)),
           (on || had) && h("div", { class: "actions", style: "margin:8px 0 0" }, btn("Save " + short, async () => {
             if (rows.some(r => !r.square || !r.name.trim())) return toast("Pick a square and a name for each row.", true);
@@ -2909,15 +2934,16 @@ async function viewProfile() {
               // Squares I'm dropping: ones first saved for someone else go back to them; the rest are deleted
               for (const x of existing.filter(x => !keep.includes(x.square)))
                 must(x.saved_for
-                  ? await sb.from("square_defaults").update({ user_id: null, display_name: x.saved_for }).eq("id", x.id)
+                  ? await sb.from("square_defaults").update({ user_id: null, display_name: x.saved_for, font: null, avatar_url: null }).eq("id", x.id)
                   : await sb.from("square_defaults").delete().eq("id", x.id));
               for (const r of rows) {
                 const mine = existing.find(x => x.square === r.square), claim = claimable.find(x => x.square === r.square);
-                if (mine) must(await sb.from("square_defaults").update({ display_name: r.name.trim() }).eq("id", mine.id));
+                const look = { font: r.font === "classic" ? null : r.font, avatar_url: r.avatar || null };
+                if (mine) must(await sb.from("square_defaults").update({ display_name: r.name.trim(), ...look }).eq("id", mine.id));
                 else if (claim) {
-                  const done = must(await sb.from("square_defaults").update({ user_id: S.me.id, display_name: r.name.trim() }).eq("id", claim.id).select());
+                  const done = must(await sb.from("square_defaults").update({ user_id: S.me.id, display_name: r.name.trim(), ...look }).eq("id", claim.id).select());
                   if (!done.length) throw new Error(`Square ${r.square} couldn't be claimed. Refresh and try again.`);
-                } else must(await sb.from("square_defaults").insert({ community_id: cid, user_id: S.me.id, league: lg, square: r.square, display_name: r.name.trim() }));
+                } else must(await sb.from("square_defaults").insert({ community_id: cid, user_id: S.me.id, league: lg, square: r.square, display_name: r.name.trim(), ...look }));
               }
               toast(`${short} squares saved`); load();
             } catch (e) { toast(/duplicate|unique/i.test(e.message) ? "Someone just took one of those squares. Pick another." : e.message, true); load(); }
@@ -2931,9 +2957,10 @@ async function viewProfile() {
   render(
     h("div", { class: "crumbs" }, h("a", { href: "#/" }, "Home")),
     h("h1", {}, "My profile"),
-    squareLook(),
+    h("div", { class: "panel lookname" }, h("div", {}, h("b", {}, displayName(S.me)), h("div", { class: "meta" }, S.me.email || "")),
+      h("button", { type: "button", class: "linkbtn", onclick: () => editName() }, "Change name")),
     h("h2", {}, "Default square positions"),
-    h("p", { class: "meta" }, "Your squares fill in automatically on every new board in that league. A square you save is yours alone in this community."),
+    h("p", { class: "meta" }, "Your squares fill in on every new board in that league, in the font you pick. Tap the little square to add a photo."),
     pickC && h("div", { class: "actions" }, pickC),
     box);
   await load();
