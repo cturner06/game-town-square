@@ -154,6 +154,8 @@ h2{font:700 20px/1.2 var(--ui);margin:28px 0 10px}
 .num{display:flex;align-items:center;justify-content:center;font:800 30px/1 var(--display)}
 .sq{position:relative;display:flex;align-items:center;justify-content:center;padding:11px 3px}
 .sq .nm{display:block;width:100%;text-align:center;font:400 15px/1.05 var(--hand);max-height:32px;overflow:hidden;overflow-wrap:anywhere}
+.sq .sqav{position:absolute;right:2px;top:2px;width:16px;height:16px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
+.sq .nm.fx{font-size:13px}
 .sq .no{position:absolute;right:3px;bottom:1px;font:600 10px/1 var(--ui);color:#555}
 .sq.win{background:#FFE58A}
 .sq .wb{position:absolute;left:2px;top:2px;font:700 9px/1 var(--ui);background:#1D1D1D;color:#FFE14D;padding:2px 3px;border-radius:3px;white-space:nowrap}
@@ -403,6 +405,22 @@ main.wide{max-width:1400px}
   background:repeating-linear-gradient(135deg,rgba(242,182,29,.16) 0 12px,rgba(242,182,29,.08) 12px 24px);box-shadow:inset 0 0 0 1px rgba(242,182,29,.6)}
 .practice span{color:var(--chalk-dim)}
 .sqgrid{display:grid;gap:10px}
+.lookrow{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.bigprev{position:relative;flex-shrink:0;width:112px;height:84px;border:2px solid #1D1D1D;background:#fff;color:#1D1D1D;display:flex;align-items:center;justify-content:center;padding:6px;box-sizing:border-box}
+.bigprev .nm{font-size:20px;line-height:1.05;text-align:center;overflow-wrap:anywhere}
+.bigprev .sqav{position:absolute;right:4px;top:4px;width:26px;height:26px;border-radius:50%;object-fit:cover}
+.bigprev .no{position:absolute;right:5px;bottom:3px;font:600 11px/1 var(--ui);color:#555}
+.lookside{flex:1;min-width:200px}
+.flabel{display:flex;flex-direction:column;gap:4px;font-size:14px;font-weight:600}
+.flabel input{min-height:44px;border-radius:10px;border:1px solid var(--line-2);background:var(--card);color:var(--chalk);font:inherit;padding:0 12px}
+.fontgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
+.fopt{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:74px;padding:8px 6px;border:0;border-radius:12px;background:#fff;color:#1D1D1D;cursor:pointer;box-shadow:inset 0 0 0 1px var(--line-2)}
+.fopt.on{box-shadow:inset 0 0 0 3px #F2B61D}
+.fopt .fprev{font-size:18px;line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fopt small{font-size:12px;color:#6B6B6B;font-family:var(--ui)}
+.avimg{object-fit:cover;border-radius:50%}
+.av.avimg{width:38px;height:38px;flex-shrink:0}
+.drawer .dav{width:64px;height:64px;margin:0 14px 8px}
 .capbox{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
 @media (min-width:760px){.sqgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .sqleague{padding:12px 14px;border-radius:14px;background:var(--card);box-shadow:var(--card-edge)}
@@ -726,7 +744,7 @@ function openDrawer(title, items) {
   const sc = h("div", { class: "dscrim", onclick: close });
   const d = h("nav", { class: "drawer", "aria-label": title },
     h("div", { class: "dhead" }, h("b", {}, title), iconBtn("close", "Close menu", close)),
-    items.filter(Boolean).filter((x, i, a) => x !== "-" || (i > 0 && i < a.length - 1 && a[i - 1] !== "-")).map(x => x === "-" ? h("hr") : x.heading ? h("div", { class: "dlabel" }, x.heading) : x.note ? h("div", { class: "dnote" }, x.note) :
+    items.filter(Boolean).filter((x, i, a) => x !== "-" || (i > 0 && i < a.length - 1 && a[i - 1] !== "-")).map(x => x === "-" ? h("hr") : x.heading ? h("div", { class: "dlabel" }, x.heading) : x.note ? h("div", { class: "dnote" }, x.note) : x.node ? x.node :
       h("button", { type: "button", class: "ditem " + (x.cls || "") + (x.toggle != null ? " dtog" : ""), onclick: () => { close(); x.fn(); },
         ...(x.toggle != null ? { role: "switch", "aria-checked": x.toggle ? "true" : "false" } : {}) },
         x.label, x.toggle != null && h("span", { class: "dpill" + (x.toggle ? " on" : "") }, x.toggle ? "On" : "Off"))));
@@ -1114,7 +1132,7 @@ async function viewPeople() {
         }) }, "Remove access")));
     return h("div", { class: "prow2" + (open ? " open" : "") },
       h("button", { type: "button", class: "phd", "aria-expanded": open ? "true" : "false", onclick: toggleOpen },
-        h("span", { class: "av r-" + role.toLowerCase().replace(/\s+/g, "") }, initials(p.display_name)),
+        p.avatar_url ? h("img", { class: "av avimg", src: p.avatar_url, alt: "" }) : h("span", { class: "av r-" + role.toLowerCase().replace(/\s+/g, "") }, initials(p.display_name)),
         h("span", { class: "pnm" }, h("b", {}, p.display_name, me && h("small", {}, " (you)")), h("span", {}, sub)),
         h("span", { class: "rtag r-" + role.toLowerCase().replace(/\s+/g, "") }, role),
         h("span", { class: "chev", "aria-hidden": "true" }, "›")),
@@ -1739,6 +1757,7 @@ async function viewSet(id) {
   if (!set) throw new Error("Board set not found. Check the link.");
   const boards = must(await sb.from("boards").select("*").eq("set_id", id)
     .order("sort_order").order("created_at"));
+  await loadSquareStyles(set.community_id);
   const mg = canManage(set.community_id);
   const wk = set.weeks || {};
   render(
@@ -1772,6 +1791,7 @@ async function viewBoard(id) {
   if (!b) throw new Error("Board not found. Check the link.");
   const mg = canManage(b.board_sets.community_id);
   const wk = must(await sb.from("weeks").select("*").eq("id", b.board_sets.week_id).maybeSingle());
+  await loadSquareStyles(b.board_sets.community_id);
   const owner = mg || (S.me && b.managed_by === S.me.id);
   render(
     h("div", { class: "crumbs" }, h("a", { href: "#/s/" + b.board_sets.id }, b.board_sets.name)),
@@ -2039,7 +2059,11 @@ function renderSheet(b, editable, refresh, slots = SLOTS) {
       style: `grid-row:${r + 3};grid-column:${c + 3}`,
       "aria-label": `Square ${idx}${b.squares[idx - 1] ? ", " + b.squares[idx - 1] : ""}`,
       ...clickable(() => editSquare(b, idx, refresh))
-    }, wins && h("span", { class: "wb" }, wins.join(" ")), h("span", { class: "nm" }, b.squares[idx - 1] || ""), h("span", { class: "no" }, idx)));
+    }, wins && h("span", { class: "wb" }, wins.join(" ")),
+      (() => { const st = sqStyle(b.squares[idx - 1]); return st?.avatar && h("img", { class: "sqav", src: st.avatar, alt: "", crossorigin: "anonymous" }); })(),
+      h("span", { class: "nm" + (sqStyle(b.squares[idx - 1])?.font && sqStyle(b.squares[idx - 1]).font !== "classic" ? " fx" : ""),
+        style: sqStyle(b.squares[idx - 1])?.font ? `font-family:${fontStack(sqStyle(b.squares[idx - 1]).font)}` : null }, b.squares[idx - 1] || ""),
+      h("span", { class: "no" }, idx)));
   }
   return h("div", { class: "sheet" + (editable ? " edit" : ""), "data-cap": b.id },
     (b.managed_by_name || b.numbers_auto_at || b.unlocked_at) && h("div", { class: "sheettop" },
@@ -2571,6 +2595,7 @@ async function boardFromVote(p, g) {
 // Profile menu: tap your name in the top right corner
 function profileMenu() {
   openDrawer(displayName(S.me), [
+    S.me?.avatar_url && { node: h("img", { class: "avimg dav", src: S.me.avatar_url, alt: "" }) },
     S.me?.email && { note: S.me.email },
     { label: "My profile and squares", fn: () => go("#/me") },
     { label: "Change my name", fn: () => editName() },
@@ -2589,6 +2614,50 @@ function ownerMenu() {
     { label: "People", fn: () => go("#/people") },
     { label: "Help and guides", fn: () => go("#/help") }]);
 }
+/* ---------- Square name fonts and photos ----------
+   Each person picks a font for their square name and can upload a photo. On boards, any square
+   showing their square name (or a saved square linked to them) uses that font and shows the photo. */
+const SQ_FONTS = [
+  ["classic", "Classic", "Kalam", "Kalam:wght@400"],
+  ["permanent-marker", "Marker", "Permanent Marker", "Permanent+Marker"],
+  ["bangers", "Comic", "Bangers", "Bangers"],
+  ["pacifico", "Surf", "Pacifico", "Pacifico"],
+  ["luckiest-guy", "Cartoon", "Luckiest Guy", "Luckiest+Guy"],
+  ["lobster", "Diner", "Lobster", "Lobster"],
+  ["creepster", "Spooky", "Creepster", "Creepster"],
+  ["special-elite", "Typewriter", "Special Elite", "Special+Elite"],
+  ["bungee", "Street sign", "Bungee", "Bungee"],
+  ["black-ops-one", "Stencil", "Black Ops One", "Black+Ops+One"],
+  ["rock-salt", "Scribble", "Rock Salt", "Rock+Salt"],
+  ["righteous", "Retro", "Righteous", "Righteous"],
+  ["fredoka", "Bubbly", "Fredoka", "Fredoka:wght@600"]];
+const fontOf = k => SQ_FONTS.find(f => f[0] === k);
+const _fontsLoaded = new Set(["classic"]);
+function ensureFonts(keys) {
+  const need = [...new Set(keys)].filter(k => fontOf(k) && !_fontsLoaded.has(k));
+  if (!need.length) return;
+  need.forEach(k => _fontsLoaded.add(k));
+  document.head.append(h("link", { rel: "stylesheet",
+    href: "https://fonts.googleapis.com/css2?" + need.map(k => "family=" + fontOf(k)[3]).join("&") + "&display=swap" }));
+}
+const fontStack = k => fontOf(k) ? `'${fontOf(k)[2]}', var(--hand)` : "var(--hand)";
+// Styles for the boards on screen: lowercased square name -> { font, avatar }
+async function loadSquareStyles(cid) {
+  S.sqStyles = new Map();
+  if (!cid) return;
+  try {
+    const rows = must(await sb.rpc("square_styles", { cid })) || [];
+    rows.forEach(r => S.sqStyles.set(String(r.name).trim().toLowerCase(), { font: r.font, avatar: r.avatar }));
+    ensureFonts(rows.map(r => r.font).filter(Boolean));
+    await document.fonts?.ready;
+  } catch { /* boards still show, just without styles */ }
+}
+const sqStyle = name => name ? S.sqStyles?.get(String(name).trim().toLowerCase()) : null;
+// Small round photo, or initials when there's no photo
+const avatarEl = (url, name, cls = "") => url
+  ? h("img", { class: "avimg " + cls, src: url, alt: "", crossorigin: "anonymous", loading: "lazy" })
+  : h("span", { class: "avtxt " + cls }, String(name || "?").split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(x => x[0].toUpperCase()).join(""));
+
 /* ---------- Players, invites, saved squares ----------
    An admin shares the community's invite link (reusable until turned off) or a one-time code.
    Players get view access and save their squares per league in their profile. Every new board
@@ -2704,6 +2773,63 @@ async function addSavedSquare(c, saved) {
   catch (e) { toast(e.message, true); }
 }
 
+// Square name, font and photo editor (on My profile)
+function squareLook() {
+  ensureFonts(SQ_FONTS.map(f => f[0]));
+  let name = S.me.square_name || "", font = S.me.square_font || "classic";
+  const wrap = h("section", { class: "panel look" });
+  const draw = () => {
+    const shown = name.trim() || "Your name";
+    const nameIn = h("input", { type: "text", value: name, maxlength: 24, placeholder: "Like C&C or 1536", "aria-label": "Square name" });
+    nameIn.addEventListener("input", () => { name = nameIn.value; wrap.querySelectorAll(".fprev").forEach(x => x.textContent = name.trim() || "Your name");
+      wrap.querySelector(".bigprev .nm").textContent = name.trim() || "Your name"; });
+    const fileIn = h("input", { type: "file", accept: "image/*", style: "display:none" });
+    fileIn.addEventListener("change", () => fileIn.files[0] && uploadPhoto(fileIn.files[0]).then(() => draw()));
+    wrap.replaceChildren(
+      h("h2", { style: "margin:0 0 4px" }, "Square name and style"),
+      h("p", { class: "meta", style: "margin:0 0 12px" }, "What prints in your squares. Your font and photo show on every board in your communities."),
+      h("div", { class: "lookrow" },
+        h("div", { class: "bigprev" }, S.me.avatar_url && h("img", { class: "sqav", src: S.me.avatar_url, alt: "" }),
+          h("span", { class: "nm", style: `font-family:${fontStack(font)}` }, shown), h("span", { class: "no" }, "67")),
+        h("div", { class: "lookside" },
+          h("label", { class: "flabel" }, h("span", {}, "Square name"), nameIn),
+          h("div", { class: "actions", style: "margin:8px 0 0" },
+            btn(S.me.avatar_url ? "Change photo" : "Upload photo", () => fileIn.click()),
+            S.me.avatar_url && btn("Remove photo", async () => {
+              try { await sb.storage.from("avatars").remove([S.me.id + ".jpg"]); must(await sb.from("profiles").update({ avatar_url: null }).eq("id", S.me.id));
+                await loadMe(); toast("Photo removed"); draw(); } catch (e) { toast(e.message, true); }
+            }, "danger")), fileIn)),
+      h("div", { class: "plbl" }, "Font"),
+      h("div", { class: "fontgrid", role: "radiogroup", "aria-label": "Font" }, SQ_FONTS.map(([k, label]) =>
+        h("button", { type: "button", role: "radio", "aria-checked": k === font ? "true" : "false", class: "fopt" + (k === font ? " on" : ""),
+          onclick: () => { font = k; draw(); } },
+          h("span", { class: "fprev", style: `font-family:${fontStack(k)}` }, shown), h("small", {}, label)))),
+      h("div", { class: "actions", style: "margin:12px 0 0" }, btn("Save name and font", async () => {
+        try {
+          must(await sb.from("profiles").update({ square_name: name.trim() || null, square_font: font === "classic" ? null : font }).eq("id", S.me.id));
+          await loadMe(); toast("Saved");
+        } catch (e) { toast(e.message, true); }
+      }, "primary")));
+  };
+  draw();
+  return wrap;
+}
+// Photo upload: cropped to a square and shrunk to 256 x 256 before it leaves the phone
+async function uploadPhoto(file) {
+  try {
+    const img = await createImageBitmap(file);
+    const side = Math.min(img.width, img.height), cv = document.createElement("canvas");
+    cv.width = cv.height = 256;
+    cv.getContext("2d").drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, 256, 256);
+    const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.85));
+    const { error } = await sb.storage.from("avatars").upload(S.me.id + ".jpg", blob, { upsert: true, contentType: "image/jpeg", cacheControl: "3600" });
+    if (error) throw error;
+    const url = sb.storage.from("avatars").getPublicUrl(S.me.id + ".jpg").data.publicUrl + "?v=" + Date.now();
+    must(await sb.from("profiles").update({ avatar_url: url }).eq("id", S.me.id));
+    await loadMe(); toast("Photo saved");
+  } catch (e) { toast(e.message || "That photo didn't upload. Try a JPG or PNG.", true); }
+}
+
 // My profile: name, and my saved squares for each community I'm in
 async function viewProfile() {
   const want = new URLSearchParams(location.hash.split("?")[1] || "").get("c");
@@ -2733,7 +2859,7 @@ async function viewProfile() {
           h("div", { class: "sqhead" }, h("b", {}, short), h("span", { class: "meta" }, `${lg} · ${taken.length + rows.length} of ${cap} saved`),
             h("button", { type: "button", class: "mtog" + (on ? " on" : ""), role: "switch", "aria-checked": on ? "true" : "false", "aria-label": `${lg} squares`,
               onclick: () => { if (!on && room() < 1) return toast(`Saved squares are full for ${short} (${cap} of ${cap}).`, true);
-                rows = on ? [] : [{ square: null, name: displayName(S.me) }]; draw(); } }, h("span", { class: "oknob" }))),
+                rows = on ? [] : [{ square: null, name: S.me.square_name || displayName(S.me) }]; draw(); } }, h("span", { class: "oknob" }))),
           on && rows.map((r, i) => {
             const sel = h("select", { "aria-label": `${short} square` }, h("option", { value: "" }, "Square"),
               Array.from({ length: 100 }, (_, k) => k + 1).filter(n => !taken.includes(n) && (n === r.square || !used().includes(n)))
@@ -2745,7 +2871,7 @@ async function viewProfile() {
               h("button", { type: "button", class: "linkbtn danger", "aria-label": "Remove this square", onclick: () => { rows.splice(i, 1); draw(); } }, "×"));
           }),
           on && h("div", { class: "actions", style: "margin:6px 0 0" }, room() > 0
-            ? h("button", { type: "button", class: "linkbtn", onclick: () => { rows.push({ square: null, name: rows[0]?.name || displayName(S.me) }); draw(); } }, "+ Add square")
+            ? h("button", { type: "button", class: "linkbtn", onclick: () => { rows.push({ square: null, name: rows[0]?.name || S.me.square_name || displayName(S.me) }); draw(); } }, "+ Add square")
             : h("span", { class: "meta" }, `Full: ${cap} of ${cap} saved squares used.`)),
           (on || had) && h("div", { class: "actions", style: "margin:8px 0 0" }, btn("Save " + short, async () => {
             if (rows.some(r => !r.square || !r.name.trim())) return toast("Pick a square and a name for each row.", true);
@@ -2766,6 +2892,7 @@ async function viewProfile() {
     h("h1", {}, "My profile"),
     h("div", { class: "panel" }, h("p", { style: "margin:0 0 8px" }, h("b", {}, displayName(S.me)), h("span", { class: "meta" }, " · " + (S.me.email || ""))),
       btn("Change my name", () => editName())),
+    squareLook(),
     h("h2", {}, "Default square positions"),
     h("p", { class: "meta" }, "Your squares fill in automatically on every new board in that league. A square you save is yours alone in this community."),
     pickC && h("div", { class: "actions" }, pickC),
