@@ -406,11 +406,20 @@ main.wide{max-width:1400px}
 .practice span{color:var(--chalk-dim)}
 .sqgrid{display:grid;gap:10px}
 .lookrow{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
-.bigprev{position:relative;flex-shrink:0;width:112px;height:84px;border:2px solid #1D1D1D;background:#fff;color:#1D1D1D;display:flex;align-items:center;justify-content:center;padding:6px;box-sizing:border-box}
+.lookname{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 0 10px;margin:0 0 12px;border-bottom:1px solid var(--line)}
+.lookname .meta{font-size:13px;overflow:hidden;text-overflow:ellipsis}
+.lookname > div{min-width:0}
+.lookname .linkbtn{white-space:nowrap}
+.lookrow{flex-wrap:nowrap !important}
+.bigprev{position:relative;flex-shrink:0;width:96px;height:96px;border:2px solid #1D1D1D;background:#fff;color:#1D1D1D;display:flex;align-items:center;justify-content:center;padding:6px;box-sizing:border-box}
 .bigprev .nm{font-size:20px;line-height:1.05;text-align:center;overflow-wrap:anywhere}
 .bigprev .sqav{position:absolute;right:4px;top:4px;width:26px;height:26px;border-radius:50%;object-fit:cover}
 .bigprev .no{position:absolute;right:5px;bottom:3px;font:600 11px/1 var(--ui);color:#555}
-.lookside{flex:1;min-width:200px}
+.lookside{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.lookfields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+@media (max-width:480px){.lookfields{grid-template-columns:1fr}}
+.sqpick{min-height:44px;border-radius:10px;border:1px solid var(--line-2);background:var(--card);color:var(--chalk);font:inherit;font-weight:600;padding:0 12px;max-width:100%}
+.flabel select{min-height:44px;border-radius:10px;border:1px solid var(--line-2);background:var(--card);color:var(--chalk);font:inherit;padding:0 10px;width:100%}
 .flabel{display:flex;flex-direction:column;gap:4px;font-size:14px;font-weight:600}
 .flabel input{min-height:44px;border-radius:10px;border:1px solid var(--line-2);background:var(--card);color:var(--chalk);font:inherit;padding:0 12px}
 .fontgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
@@ -2773,43 +2782,42 @@ async function addSavedSquare(c, saved) {
   catch (e) { toast(e.message, true); }
 }
 
-// Square name, font and photo editor (on My profile)
+// Square name, font and photo editor (on My profile): one compact card
 function squareLook() {
   ensureFonts(SQ_FONTS.map(f => f[0]));
   let name = S.me.square_name || "", font = S.me.square_font || "classic";
   const wrap = h("section", { class: "panel look" });
   const draw = () => {
-    const shown = name.trim() || "Your name";
+    const prevName = h("span", { class: "nm", style: `font-family:${fontStack(font)}` }, name.trim() || "Your name");
     const nameIn = h("input", { type: "text", value: name, maxlength: 24, placeholder: "Like C&C or 1536", "aria-label": "Square name" });
-    nameIn.addEventListener("input", () => { name = nameIn.value; wrap.querySelectorAll(".fprev").forEach(x => x.textContent = name.trim() || "Your name");
-      wrap.querySelector(".bigprev .nm").textContent = name.trim() || "Your name"; });
+    nameIn.addEventListener("input", () => { name = nameIn.value; prevName.textContent = name.trim() || "Your name"; });
+    const fontSel = h("select", { "aria-label": "Font" }, SQ_FONTS.map(([k, label, fam]) => h("option", { value: k, selected: k === font }, `${label} (${fam})`)));
+    fontSel.addEventListener("change", () => { font = fontSel.value; prevName.style.fontFamily = fontStack(font); });
     const fileIn = h("input", { type: "file", accept: "image/*", style: "display:none" });
     fileIn.addEventListener("change", () => fileIn.files[0] && uploadPhoto(fileIn.files[0]).then(() => draw()));
     wrap.replaceChildren(
-      h("h2", { style: "margin:0 0 4px" }, "Square name and style"),
-      h("p", { class: "meta", style: "margin:0 0 12px" }, "What prints in your squares. Your font and photo show on every board in your communities."),
+      h("div", { class: "lookname" }, h("div", {}, h("b", {}, displayName(S.me)), h("div", { class: "meta" }, S.me.email || "")),
+        h("button", { type: "button", class: "linkbtn", onclick: () => editName() }, "Change name")),
       h("div", { class: "lookrow" },
-        h("div", { class: "bigprev" }, S.me.avatar_url && h("img", { class: "sqav", src: S.me.avatar_url, alt: "" }),
-          h("span", { class: "nm", style: `font-family:${fontStack(font)}` }, shown), h("span", { class: "no" }, "67")),
+        h("div", { class: "bigprev", "aria-label": "Preview of your square" },
+          S.me.avatar_url && h("img", { class: "sqav", src: S.me.avatar_url, alt: "" }), prevName, h("span", { class: "no" }, "67")),
         h("div", { class: "lookside" },
-          h("label", { class: "flabel" }, h("span", {}, "Square name"), nameIn),
-          h("div", { class: "actions", style: "margin:8px 0 0" },
-            btn(S.me.avatar_url ? "Change photo" : "Upload photo", () => fileIn.click()),
-            S.me.avatar_url && btn("Remove photo", async () => {
-              try { await sb.storage.from("avatars").remove([S.me.id + ".jpg"]); must(await sb.from("profiles").update({ avatar_url: null }).eq("id", S.me.id));
-                await loadMe(); toast("Photo removed"); draw(); } catch (e) { toast(e.message, true); }
-            }, "danger")), fileIn)),
-      h("div", { class: "plbl" }, "Font"),
-      h("div", { class: "fontgrid", role: "radiogroup", "aria-label": "Font" }, SQ_FONTS.map(([k, label]) =>
-        h("button", { type: "button", role: "radio", "aria-checked": k === font ? "true" : "false", class: "fopt" + (k === font ? " on" : ""),
-          onclick: () => { font = k; draw(); } },
-          h("span", { class: "fprev", style: `font-family:${fontStack(k)}` }, shown), h("small", {}, label)))),
-      h("div", { class: "actions", style: "margin:12px 0 0" }, btn("Save name and font", async () => {
-        try {
-          must(await sb.from("profiles").update({ square_name: name.trim() || null, square_font: font === "classic" ? null : font }).eq("id", S.me.id));
-          await loadMe(); toast("Saved");
-        } catch (e) { toast(e.message, true); }
-      }, "primary")));
+          h("b", {}, "Square name and style"),
+          h("div", { class: "lookfields" },
+            h("label", { class: "flabel" }, h("span", {}, "Square name"), nameIn),
+            h("label", { class: "flabel" }, h("span", {}, "Font"), fontSel)))),
+      h("div", { class: "actions", style: "margin:10px 0 0" },
+        btn("Save name and font", async () => {
+          try {
+            must(await sb.from("profiles").update({ square_name: name.trim() || null, square_font: font === "classic" ? null : font }).eq("id", S.me.id));
+            await loadMe(); toast("Saved");
+          } catch (e) { toast(e.message, true); }
+        }, "primary"),
+        btn(S.me.avatar_url ? "Change photo" : "Add photo", () => fileIn.click()),
+        S.me.avatar_url && h("button", { type: "button", class: "linkbtn danger", onclick: async () => {
+          try { await sb.storage.from("avatars").remove([S.me.id + ".jpg"]); must(await sb.from("profiles").update({ avatar_url: null }).eq("id", S.me.id));
+            await loadMe(); toast("Photo removed"); draw(); } catch (e) { toast(e.message, true); }
+        } }, "Remove photo"), fileIn));
   };
   draw();
   return wrap;
@@ -2841,7 +2849,7 @@ async function viewProfile() {
   const comms = [...joined, ...adm.filter(a => !joined.some(j => j.id === a.id))].sort((a, b) => a.name.localeCompare(b.name));
   let cid = comms.some(c => c.id === want) ? want : comms[0]?.id;
   const box = h("div");
-  const pickC = comms.length > 1 && h("select", { "aria-label": "Community", style: "max-width:320px" },
+  const pickC = comms.length > 1 && h("select", { class: "sqpick", "aria-label": "Community" },
     comms.map(c => h("option", { value: c.id, selected: c.id === cid }, c.name)));
   if (pickC) pickC.addEventListener("change", () => { cid = pickC.value; load(); });
   async function load() {
@@ -2852,8 +2860,12 @@ async function viewProfile() {
     box.replaceChildren(h("div", { class: "sqgrid" }, SQUARE_LEAGUES.map(([lg, short]) => {
       let rows = mineAll.filter(x => x.league === lg).map(x => ({ square: x.square, name: x.display_name }));
       const had = rows.length > 0;   // so turning a league off can still be saved
-      const taken = all.filter(x => x.league === lg && x.user_id !== S.me.id).map(x => x.square);
-      const room = () => cap - taken.length - rows.length;   // open saved-square spots left in this league
+      const others = all.filter(x => x.league === lg && x.user_id !== S.me.id);
+      // Admins can claim a square an admin saved for someone with no login yet
+      const claimable = canManage(cid) ? others.filter(x => !x.user_id) : [];
+      const taken = others.filter(x => !claimable.includes(x)).map(x => x.square);
+      const ownerOf = n => others.find(x => x.square === n)?.display_name;
+      const room = () => cap - taken.length - rows.length - claimable.filter(x => !rows.some(r => r.square === x.square)).length;
       const wrap = h("div", { class: "sqleague" });
       const draw = () => {
         const on = rows.length > 0;
@@ -2865,8 +2877,12 @@ async function viewProfile() {
                 rows = on ? [] : [{ square: null, name: S.me.square_name || displayName(S.me) }]; draw(); } }, h("span", { class: "oknob" }))),
           on && rows.map((r, i) => {
             const sel = h("select", { "aria-label": `${short} square` }, h("option", { value: "" }, "Square"),
-              Array.from({ length: 100 }, (_, k) => k + 1).filter(n => !taken.includes(n) && (n === r.square || !used().includes(n)))
-                .map(n => h("option", { value: n, selected: n === r.square }, String(n))));
+              Array.from({ length: 100 }, (_, k) => k + 1).map(n => {
+                const theirs = taken.includes(n), mineElsewhere = n !== r.square && used().includes(n);
+                const claim = claimable.some(x => x.square === n);
+                return h("option", { value: n, selected: n === r.square, disabled: theirs || mineElsewhere },
+                  theirs ? `${n} · ${ownerOf(n)} (taken)` : claim && n !== r.square ? `${n} · ${ownerOf(n)} (claim)` : mineElsewhere ? `${n} (yours, above)` : String(n));
+              }));
             sel.addEventListener("change", () => { r.square = Number(sel.value) || null; draw(); });
             const nm = h("input", { type: "text", value: r.name, maxlength: 40, "aria-label": `${short} display name`, placeholder: "Display name" });
             nm.addEventListener("input", () => { r.name = nm.value; });
@@ -2880,7 +2896,11 @@ async function viewProfile() {
             if (rows.some(r => !r.square || !r.name.trim())) return toast("Pick a square and a name for each row.", true);
             try {
               must(await sb.from("square_defaults").delete().eq("community_id", cid).eq("user_id", S.me.id).eq("league", lg));
-              if (rows.length) must(await sb.from("square_defaults").insert(rows.map(r => ({ community_id: cid, user_id: S.me.id, league: lg, square: r.square, display_name: r.name.trim() }))));
+              // Claimed squares already exist (saved for someone with no login): take them over instead of adding
+              for (const r of rows.filter(r => claimable.some(x => x.square === r.square)))
+                must(await sb.from("square_defaults").update({ user_id: S.me.id, display_name: r.name.trim() }).eq("id", claimable.find(x => x.square === r.square).id));
+              const fresh = rows.filter(r => !claimable.some(x => x.square === r.square));
+              if (fresh.length) must(await sb.from("square_defaults").insert(fresh.map(r => ({ community_id: cid, user_id: S.me.id, league: lg, square: r.square, display_name: r.name.trim() }))));
               toast(`${short} squares saved`); load();
             } catch (e) { toast(/duplicate|unique/i.test(e.message) ? "Someone just took one of those squares. Pick another." : e.message, true); load(); }
             // (the database also refuses anything over the community's saved-square limit)
@@ -2893,8 +2913,6 @@ async function viewProfile() {
   render(
     h("div", { class: "crumbs" }, h("a", { href: "#/" }, "Home")),
     h("h1", {}, "My profile"),
-    h("div", { class: "panel" }, h("p", { style: "margin:0 0 8px" }, h("b", {}, displayName(S.me)), h("span", { class: "meta" }, " · " + (S.me.email || ""))),
-      btn("Change my name", () => editName())),
     squareLook(),
     h("h2", {}, "Default square positions"),
     h("p", { class: "meta" }, "Your squares fill in automatically on every new board in that league. A square you save is yours alone in this community."),
