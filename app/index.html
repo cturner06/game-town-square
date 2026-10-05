@@ -2699,12 +2699,14 @@ async function viewCommunityAsPlayer(c) {
 }
 
 async function playersTab(c) {
-  const [inv, members, saved] = await Promise.all([
+  let [inv, members, saved] = await Promise.all([
     sb.rpc("community_invite", { cid: c.id }).then(must),
     sb.rpc("community_members_list", { cid: c.id }).then(must),
-    sb.from("square_defaults").select("id,user_id,league,square,display_name").eq("community_id", c.id).order("league").order("square").then(must)]);
+    sb.from("square_defaults").select("id,user_id,league,square,display_name,saved_for").eq("community_id", c.id).order("league").order("square").then(must)]);
   const url = link("#/i/" + inv.token);
-  const nameOf = uid => members.find(m => m.user_id === uid)?.display_name;
+  const owners = members;                                  // anyone who can own a square here (players, you, admins)
+  members = members.filter(m => m.is_member);              // invited players
+  const nameOf = uid => owners.find(m => m.user_id === uid)?.display_name;
   const save = fn => async () => { try { await fn(); route(); } catch (e) { toast(e.message, true); } };
   return h("div", {},
     h("h2", {}, "Invite players"),
@@ -2761,8 +2763,10 @@ async function playersTab(c) {
       return [h("h3", { style: "margin:14px 0 6px" }, `${lg} (${short})`),
         h("div", { class: "sqlist" }, rows.map(x => {
           const pick = h("select", { "aria-label": `Who owns square ${x.square}` },
-            h("option", { value: "" }, "No login yet"), members.map(m => h("option", { value: m.user_id, selected: m.user_id === x.user_id }, m.display_name)));
-          pick.addEventListener("change", save(async () => must(await sb.from("square_defaults").update({ user_id: pick.value || null }).eq("id", x.id))));
+            h("option", { value: "" }, x.saved_for ? `No login yet (${x.saved_for})` : "No login yet"),
+            owners.map(m => h("option", { value: m.user_id, selected: m.user_id === x.user_id }, m.user_id === S.me.id ? `${m.display_name} (you)` : m.display_name)));
+          pick.addEventListener("change", save(async () => must(await sb.from("square_defaults")
+            .update(pick.value ? { user_id: pick.value } : { user_id: null, display_name: x.saved_for || x.display_name }).eq("id", x.id))));
           return h("div", { class: "sqrow" }, h("span", { class: "sqn" }, String(x.square)), h("b", {}, x.display_name), pick,
             h("button", { type: "button", class: "linkbtn danger", onclick: save(async () => must(await sb.from("square_defaults").delete().eq("id", x.id))) }, "Remove"));
         }))];
@@ -2778,7 +2782,7 @@ async function addSavedSquare(c, saved) {
   if (!(sq >= 1 && sq <= 100)) return toast("Pick a square from 1 to 100.", true);
   if (!v.name.trim()) return toast("Enter the name that shows in the square.", true);
   if (saved.some(x => x.league === v.league && x.square === sq)) return toast(`Square ${sq} is already saved for ${v.league}.`, true);
-  try { must(await sb.from("square_defaults").insert({ community_id: c.id, league: v.league, square: sq, display_name: v.name.trim() })); route(); }
+  try { must(await sb.from("square_defaults").insert({ community_id: c.id, league: v.league, square: sq, display_name: v.name.trim(), saved_for: v.name.trim() })); route(); }
   catch (e) { toast(e.message, true); }
 }
 
@@ -2854,15 +2858,16 @@ async function viewProfile() {
   if (pickC) pickC.addEventListener("change", () => { cid = pickC.value; load(); });
   async function load() {
     if (!cid) return box.replaceChildren(h("p", { class: "empty" }, "You aren't in a community yet. Use an invite link or a code from an admin."));
-    const all = must(await sb.from("square_defaults").select("id,user_id,league,square,display_name").eq("community_id", cid));
+    const all = must(await sb.from("square_defaults").select("id,user_id,league,square,display_name,saved_for").eq("community_id", cid));
     const cap = (must(await sb.from("communities").select("saved_cap").eq("id", cid).maybeSingle()) || {}).saved_cap ?? 30;
     const mineAll = all.filter(x => x.user_id === S.me.id);
     box.replaceChildren(h("div", { class: "sqgrid" }, SQUARE_LEAGUES.map(([lg, short]) => {
       let rows = mineAll.filter(x => x.league === lg).map(x => ({ square: x.square, name: x.display_name }));
       const had = rows.length > 0;   // so turning a league off can still be saved
       const others = all.filter(x => x.league === lg && x.user_id !== S.me.id);
-      // Admins can claim a square an admin saved for someone with no login yet
-      const claimable = canManage(cid) ? others.filter(x => !x.user_id) : [];
+      // Only empty squares can be picked. Squares saved for someone else (even with no login yet) are taken;
+      // an admin hands those over on the Players tab.
+      const claimable = [];
       const taken = others.filter(x => !claimable.includes(x)).map(x => x.square);
       const ownerOf = n => others.find(x => x.square === n)?.display_name;
       const room = () => cap - taken.length - rows.length - claimable.filter(x => !rows.some(r => r.square === x.square)).length;
@@ -2894,13 +2899,26 @@ async function viewProfile() {
             : h("span", { class: "meta" }, `Full: ${cap} of ${cap} saved squares used.`)),
           (on || had) && h("div", { class: "actions", style: "margin:8px 0 0" }, btn("Save " + short, async () => {
             if (rows.some(r => !r.square || !r.name.trim())) return toast("Pick a square and a name for each row.", true);
+            const claims = rows.filter(r => claimable.some(x => x.square === r.square));
+            if (claims.length && !await confirmBox("Claim saved squares?",
+              `${claims.map(r => { const x = claimable.find(c => c.square === r.square); return `Square ${r.square} is saved for ${x.saved_for || x.display_name}`; }).join(". ")}. It becomes yours on every new board. If you remove it later, it goes back to them.`,
+              "Claim")) return;
             try {
-              must(await sb.from("square_defaults").delete().eq("community_id", cid).eq("user_id", S.me.id).eq("league", lg));
-              // Claimed squares already exist (saved for someone with no login): take them over instead of adding
-              for (const r of rows.filter(r => claimable.some(x => x.square === r.square)))
-                must(await sb.from("square_defaults").update({ user_id: S.me.id, display_name: r.name.trim() }).eq("id", claimable.find(x => x.square === r.square).id));
-              const fresh = rows.filter(r => !claimable.some(x => x.square === r.square));
-              if (fresh.length) must(await sb.from("square_defaults").insert(fresh.map(r => ({ community_id: cid, user_id: S.me.id, league: lg, square: r.square, display_name: r.name.trim() }))));
+              const existing = mineAll.filter(x => x.league === lg);
+              const keep = rows.map(r => r.square);
+              // Squares I'm dropping: ones first saved for someone else go back to them; the rest are deleted
+              for (const x of existing.filter(x => !keep.includes(x.square)))
+                must(x.saved_for
+                  ? await sb.from("square_defaults").update({ user_id: null, display_name: x.saved_for }).eq("id", x.id)
+                  : await sb.from("square_defaults").delete().eq("id", x.id));
+              for (const r of rows) {
+                const mine = existing.find(x => x.square === r.square), claim = claimable.find(x => x.square === r.square);
+                if (mine) must(await sb.from("square_defaults").update({ display_name: r.name.trim() }).eq("id", mine.id));
+                else if (claim) {
+                  const done = must(await sb.from("square_defaults").update({ user_id: S.me.id, display_name: r.name.trim() }).eq("id", claim.id).select());
+                  if (!done.length) throw new Error(`Square ${r.square} couldn't be claimed. Refresh and try again.`);
+                } else must(await sb.from("square_defaults").insert({ community_id: cid, user_id: S.me.id, league: lg, square: r.square, display_name: r.name.trim() }));
+              }
               toast(`${short} squares saved`); load();
             } catch (e) { toast(/duplicate|unique/i.test(e.message) ? "Someone just took one of those squares. Pick another." : e.message, true); load(); }
             // (the database also refuses anything over the community's saved-square limit)
