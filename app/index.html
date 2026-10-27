@@ -1310,8 +1310,14 @@ async function planTab(c) {
   const mine = c.owner_id === S.me?.id;
   const pending = must(await sb.from("community_transfers").select("id,to_user,created_at").eq("community_id", c.id).eq("status", "pending").maybeSingle());
   const toName = pending ? must(await sb.rpc("shown_name", { uid: pending.to_user })) : "";
+  const creatorName = c.owner_id ? must(await sb.rpc("shown_name", { uid: c.owner_id })) : "";
   return h("div", {},
-    h("p", { class: "seclbl", style: "margin-top:8px" }, "Plan"),
+    h("p", { class: "seclbl", style: "margin-top:8px" }, "Creator"),
+    h("ul", { class: "list" }, h("li", {},
+      h("div", {}, h("b", {}, creatorName || "No creator on record"),
+        h("div", { class: "meta" }, creatorName ? "Pays for this community's plan." : "Nobody is paying for this community. Set a creator to fix that.")),
+      S.me?.is_owner && btn(creatorName ? "Change creator" : "Set creator", () => setCreator(c), creatorName ? "" : "primary"))),
+    h("p", { class: "seclbl", style: "margin-top:24px" }, "Plan"),
     totalAccess(S.me) && mine ? h("p", { class: "meta" }, "You have Free Total Access. Every plan is included.")
       : c.comped ? h("p", { class: "meta" }, "This community is free. No plan needed.")
       : mine ? [h("p", { class: "meta" }, "You created this community, so you pay for its plan. See what you have on Plans and billing."),
@@ -1320,12 +1326,14 @@ async function planTab(c) {
             btn("Get a Playoffs pass", () => planPicker({ cid: c.id, cname: c.name, need: "playoffs" })),
             h("a", { class: "btn", href: "#/billing" }, "Plans and billing"))]
       : h("p", { class: "meta" }, "Only this community's creator can buy its plan."),
-    h("p", { class: "seclbl", style: "margin-top:24px" }, "Hand off this community"),
-    pending
+    c.owner_id && h("p", { class: "seclbl", style: "margin-top:24px" }, "Hand off this community"),
+    !c.owner_id ? null : pending
       ? h("ul", { class: "list" }, h("li", {},
           h("div", {}, h("b", {}, `Waiting on ${toName}`), h("div", { class: "meta" }, `Sent ${lockTime(pending.created_at)}. It moves once they pick a plan.`)),
           btn("Cancel hand-off", async () => { try { must(await sb.rpc("cancel_transfer", { tid: pending.id })); route(); toast("Hand-off canceled"); } catch (e) { toast(e.message, true); } }, "danger")))
-      : [h("p", { class: "meta" }, "The new owner has to pick a plan and pay before the community moves to them. Your plan runs to the end of your paid time, with no refund."),
+      : [h("p", { class: "meta" }, mine
+          ? "The new owner has to pick a plan and pay before the community moves to them. Your plan runs to the end of your paid time, with no refund."
+          : "The new owner has to pick a plan and pay before the community moves to them. The current creator's plan runs to the end of their paid time, with no refund."),
          h("div", { class: "actions" }, btn("Hand off", () => handOff(c)))]);
 }
 async function handOff(c) {
@@ -2137,43 +2145,65 @@ async function deleteSet(s) {
   } catch (e) { toast(e.message, true); }
 }
 
-// Add admin: pick from everyone with a login, with a search box (name or email)
-async function addAdmin(cid) {
-  let people;
-  try { people = must(await sb.rpc("admin_candidates", { cid })) || []; }
-  catch (e) { return toast(e.message, true); }
+// People picker: everyone in the list, a search box (name or email), tap a person to pick them.
+// onPick(person) returns true when it worked, and the picker closes.
+function pickPerson({ title, text, people, empty = "No one to pick.", note = "Not listed? They need to create a login first.", onPick }) {
   const close = () => { scrim.remove(); document.removeEventListener("keydown", onKey); };
   const onKey = e => { if (e.key === "Escape") close(); };
-  const add = async (p, b) => {
-    b.disabled = true;
-    try {
-      const { error } = await sb.from("community_admins").insert({ community_id: cid, user_id: p.id });
-      if (error && error.code !== "23505") throw new Error(error.message);
-      close(); toast(`${p.display_name} is now an admin`); route();
-    } catch (e) { b.disabled = false; toast(e.message, true); }
-  };
   const initials = n => (n || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
   const search = h("input", { type: "search", class: "ppick", placeholder: "Search by name or email", "aria-label": "Search people", autocomplete: "off" });
   const list = h("ul", { class: "plist" });
   const draw = () => {
     const q = search.value.trim().toLowerCase();
     const hits = people.filter(p => !q || (p.display_name || "").toLowerCase().includes(q) || (p.email || "").toLowerCase().includes(q));
-    list.replaceChildren(...(hits.length ? hits.map(p => h("li", {}, h("button", { type: "button", onclick: ev => add(p, ev.currentTarget) },
+    list.replaceChildren(...(hits.length ? hits.map(p => h("li", {}, h("button", { type: "button", onclick: async ev => {
+          const b = ev.currentTarget; b.disabled = true;
+          if (await onPick(p)) close(); else b.disabled = false;
+        } },
         p.avatar_url ? h("img", { class: "pav", src: p.avatar_url, alt: "" }) : h("span", { class: "pav", "aria-hidden": "true" }, initials(p.display_name)),
         h("span", { style: "min-width:0" }, h("b", {}, p.display_name, p.is_commissioner ? " (Commissioner)" : ""), h("small", {}, p.email)))))
-      : [h("li", { style: "padding:10px;color:var(--muted)" }, people.length ? "No one matches that search." : "Everyone with a login is already an admin here.")]));
+      : [h("li", { style: "padding:10px;color:var(--muted)" }, people.length ? "No one matches that search." : empty)]));
   };
   search.addEventListener("input", draw);
   draw();
   const scrim = h("div", { class: "scrim", onclick: e => { if (e.target === scrim) close(); } },
-    h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": "Add admin" },
-      h("h3", {}, "Add admin"), h("p", {}, "Tap a person to make them an admin of this community."),
-      search, list,
-      h("p", { class: "fine" }, "Not listed? They need to create a login first."),
+    h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": title },
+      h("h3", {}, title), text && h("p", {}, text), search, list,
+      note && h("p", { class: "fine" }, note),
       h("div", { class: "mbtns" }, btn("Close", close))));
   document.body.append(scrim);
   document.addEventListener("keydown", onKey);
   search.focus();
+}
+
+// Add admin: pick from everyone with a login who isn't already an admin here
+async function addAdmin(cid) {
+  let people;
+  try { people = must(await sb.rpc("admin_candidates", { cid })) || []; }
+  catch (e) { return toast(e.message, true); }
+  pickPerson({ title: "Add admin", text: "Tap a person to make them an admin of this community.", people,
+    empty: "Everyone with a login is already an admin here.",
+    onPick: async p => {
+      try {
+        const { error } = await sb.from("community_admins").insert({ community_id: cid, user_id: p.id });
+        if (error && error.code !== "23505") throw new Error(error.message);
+        toast(`${p.display_name} is now an admin`); route(); return true;
+      } catch (e) { toast(e.message, true); return false; }
+    } });
+}
+
+// Set creator (owner only): takes effect now, no payment step
+async function setCreator(c) {
+  let people;
+  try { people = (must(await sb.rpc("people_picker")) || []).filter(p => p.id !== c.owner_id); }
+  catch (e) { return toast(e.message, true); }
+  pickPerson({ title: `Set creator of ${c.name}`,
+    text: "The creator pays for this community's plan. This takes effect now with no payment step, and they're made an admin if they aren't one.",
+    people, onPick: async p => {
+      if (!await confirmBox(`Make ${p.display_name} the creator?`, `${p.display_name} will own ${c.name} and pay for its plan from now on. Any pending hand-off is canceled.`, "Set creator", "primary")) return false;
+      try { must(await sb.rpc("set_community_creator", { cid: c.id, uid: p.id })); toast(`${p.display_name} is now the creator`); route(); return true; }
+      catch (e) { toast(e.message, true); return false; }
+    } });
 }
 
 async function removeAdmin(cid, a) {
