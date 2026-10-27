@@ -127,6 +127,13 @@ h2{font:700 20px/1.2 var(--ui);margin:28px 0 10px}
 .list li:has(> a:first-child, > div:first-child > a:first-child):hover{background:var(--pick-h)}
 .list li:has(> a:first-child:focus-visible, > div:first-child > a:first-child:focus-visible){outline:3px solid #7FA6FF;outline-offset:2px}
 .list li a:focus-visible{outline:none}
+/* Home: your communities on top, everyone else's below with search and sort */
+.iconbtn.star{color:var(--gold-ink)}
+.cfind{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.cfind input{flex:1 1 220px;max-width:none;margin:0}
+.cfind select{min-height:42px;padding:8px 10px;border-radius:10px;border:0;font:inherit;font-weight:600;color:var(--chalk);background:var(--btn);box-shadow:var(--btn-edge)}
+.cgroup{font:700 15px/1.2 var(--ui);color:var(--chalk-dim);margin:16px 0 8px}
+@media (max-width:560px){.list li.crow{flex-wrap:wrap}.list li.crow > div:first-child{flex:1 1 100%}.list li.crow .chips{flex-wrap:nowrap}}
 .meta{font-size:14px;color:var(--chalk-dim)}
 .empty{color:var(--chalk-dim);padding:18px 0}
 .err{color:var(--err)}
@@ -531,6 +538,14 @@ main.wide{max-width:1400px}
 .plan b,.plan .why,.plan .then{color:inherit}.plan .why,.plan .then{color:var(--muted)}
 .modal select.sport{width:100%;margin:0 0 10px;padding:9px 10px;border-radius:8px;border:1px solid #D6CCBF;font:inherit;background:#fff;color:var(--ink)}
 .fine{font-size:13px;color:var(--muted);margin:6px 0 0}
+/* Add admin: searchable list of people */
+.ppick{width:100%;min-height:42px;margin:0 0 8px;padding:9px 10px;border-radius:8px;border:1px solid #D6CCBF;font:inherit;background:#fff;color:var(--ink)}
+.plist{list-style:none;margin:0 0 6px;padding:0;max-height:52vh;overflow:auto;display:grid;gap:4px}
+.plist button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 10px;border-radius:8px;border:1px solid transparent;background:none;color:var(--ink);font:inherit;cursor:pointer}
+.plist button:hover,.plist button:focus-visible{background:#F3EDE4;border-color:#E2DACF}
+.plist .pav{width:32px;height:32px;border-radius:50%;flex-shrink:0;object-fit:cover;background:#EFE7DC;display:grid;place-items:center;font-weight:700;font-size:14px;color:#5E544C}
+.plist b{display:block;font-weight:600}
+.plist small{display:block;color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis}
 .rbanner{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:10px 0 14px;padding:12px 14px;border-radius:12px;
   background:rgba(179,38,30,.1);box-shadow:inset 0 0 0 1px rgba(179,38,30,.45)}
 .rbanner span{color:var(--chalk-dim)}
@@ -785,6 +800,8 @@ const ICONS = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>',
   trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/>',
+  star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9Z"/>',
+  starOn: '<path fill="currentColor" d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9Z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>',
   squares: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
@@ -1033,13 +1050,76 @@ async function viewHome() {
         h("div", { class: "chips" }, btn("Copy link", () => copy(link("#/start/" + i.code))),
           btn("Cancel", async () => { try { must(await sb.rpc("cancel_creator_invite", { c: i.code })); route(); toast("Invite canceled"); } catch (e) { toast(e.message, true); } }, "danger")))))] : null,
     isPlayerOnly ? null : list.length
-      ? h("ul", { class: "list" }, list.map(c => h("li", {}, h("a", { href: "#/c/" + c.id }, c.name, c.is_practice && h("span", { class: "ptag" }, "Practice")),
-          isSuper() && h("div", { class: "chips" }, btn("Rename", () => renameCommunity(c)), btn("Delete", () => deleteCommunity(c), "danger")))))
+      ? await homeCommunityLists()
       : h("p", { class: "empty" }, isSuper()
           ? "Create a community to start adding board sets."
           : "You aren't an admin on any community yet. To start your own, ask a Commissioner for an invite link."),
     S.me && !isSuper() && !isComm() ? requestBlock(all, myReq) : null
   );
+}
+
+
+/* ---------- Home community lists ----------
+   Yours on top (you created it, admin it, or starred it), A to Z.
+   Everyone else's below, with a search box and a sort that this device remembers. */
+const CSORT_KEY = "gts-csort";
+async function homeCommunityLists() {
+  const rows = must(await sb.rpc("home_communities")) || [];
+  const me = S.me?.id;
+  const isMine = c => c.pinned || c.is_admin || c.owner_id === me;
+  const az = (a, b) => (b.is_practice - a.is_practice) || a.name.localeCompare(b.name);
+  const mine = rows.filter(isMine).sort(az);
+  const others = rows.filter(c => !isMine(c));
+  const ago = t => {
+    if (!t) return "";
+    const d = Math.floor((Date.now() - Date.parse(t)) / 86400000);
+    return d <= 0 ? "Active today" : d === 1 ? "Active yesterday" : d < 30 ? `Active ${d} days ago` : `Last active ${ctDate(t)}`;
+  };
+  const toggleStar = async c => {
+    try {
+      if (c.pinned) must(await sb.from("community_pins").delete().eq("user_id", me).eq("community_id", c.id));
+      else must(await sb.from("community_pins").insert({ user_id: me, community_id: c.id }));
+      route();
+    } catch (e) { toast(e.message, true); }
+  };
+  const row = c => h("li", { class: "crow" },
+    h("div", {},
+      h("a", { href: "#/c/" + c.id }, c.name, c.is_practice && h("span", { class: "ptag" }, "Practice")),
+      h("div", { class: "meta" }, [c.owner_name ? `Created by ${c.owner_name}` : "", ago(c.last_active)].filter(Boolean).join(". "))),
+    h("div", { class: "chips" },
+      iconBtn(c.pinned ? "starOn" : "star", c.pinned ? `Unstar ${c.name}` : `Star ${c.name}`, () => toggleStar(c), "sm star"),
+      isSuper() && btn("Rename", () => renameCommunity(c)),
+      isSuper() && btn("Delete", () => deleteCommunity(c), "danger")));
+
+  const out = [];
+  out.push(h("h2", { style: "margin-top:8px" }, "Yours"),
+    mine.length ? h("ul", { class: "list" }, mine.map(row))
+      : h("p", { class: "empty" }, "Tap the star on any community below to keep it up here."));
+  if (!others.length) return out;
+
+  let sort = "active";
+  try { sort = localStorage.getItem(CSORT_KEY) || "active"; } catch { /* default */ }
+  const search = h("input", { type: "search", class: "search", placeholder: "Search communities or creators", "aria-label": "Search communities or creators", autocomplete: "off" });
+  const sel = h("select", { "aria-label": "Sort communities" },
+    [["active", "Recently active"], ["az", "A to Z"], ["creator", "By creator"]].map(([v, l]) => h("option", { value: v, selected: v === sort }, l)));
+  const box = h("div");
+  const draw = () => {
+    const q = search.value.trim().toLowerCase();
+    let list = others.filter(c => !q || c.name.toLowerCase().includes(q) || (c.owner_name || "").toLowerCase().includes(q));
+    if (sort === "az") list.sort((a, b) => a.name.localeCompare(b.name));
+    else if (sort === "creator") list.sort((a, b) => (a.owner_name || "\uffff").localeCompare(b.owner_name || "\uffff") || a.name.localeCompare(b.name));
+    else list.sort((a, b) => Date.parse(b.last_active || 0) - Date.parse(a.last_active || 0));
+    if (!list.length) return box.replaceChildren(h("p", { class: "empty" }, `No communities match "${search.value.trim()}".`));
+    if (sort !== "creator") return box.replaceChildren(h("ul", { class: "list" }, list.map(row)));
+    const groups = new Map();
+    for (const c of list) { const k = c.owner_name || "No creator on record"; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(c); }
+    box.replaceChildren(...[...groups].flatMap(([k, cs]) => [h("p", { class: "cgroup" }, k), h("ul", { class: "list" }, cs.map(row))]));
+  };
+  search.addEventListener("input", draw);
+  sel.addEventListener("change", () => { sort = sel.value; try { localStorage.setItem(CSORT_KEY, sort); } catch { /* fine */ } draw(); });
+  draw();
+  out.push(h("h2", {}, `Everyone else's (${others.length})`), h("div", { class: "cfind" }, search, sel), box);
+  return out;
 }
 
 /* ---------- Admin access requests ----------
@@ -2057,17 +2137,43 @@ async function deleteSet(s) {
   } catch (e) { toast(e.message, true); }
 }
 
+// Add admin: pick from everyone with a login, with a search box (name or email)
 async function addAdmin(cid) {
-  const v = await modal({ title: "Add admin", text: "They need to create a login first using Admin sign in.",
-    fields: [{ name: "email", label: "Their login email", type: "email", required: true }], ok: "Add admin" });
-  if (!v) return;
-  try {
-    const uid = must(await sb.rpc("find_user_by_email", { e: v.email }));
-    if (!uid) return toast("No login found for that email. Have them create one first.", true);
-    const { error } = await sb.from("community_admins").insert({ community_id: cid, user_id: uid });
-    if (error && error.code !== "23505") throw new Error(error.message);
-    route();
-  } catch (e) { toast(e.message, true); }
+  let people;
+  try { people = must(await sb.rpc("admin_candidates", { cid })) || []; }
+  catch (e) { return toast(e.message, true); }
+  const close = () => { scrim.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = e => { if (e.key === "Escape") close(); };
+  const add = async (p, b) => {
+    b.disabled = true;
+    try {
+      const { error } = await sb.from("community_admins").insert({ community_id: cid, user_id: p.id });
+      if (error && error.code !== "23505") throw new Error(error.message);
+      close(); toast(`${p.display_name} is now an admin`); route();
+    } catch (e) { b.disabled = false; toast(e.message, true); }
+  };
+  const initials = n => (n || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+  const search = h("input", { type: "search", class: "ppick", placeholder: "Search by name or email", "aria-label": "Search people", autocomplete: "off" });
+  const list = h("ul", { class: "plist" });
+  const draw = () => {
+    const q = search.value.trim().toLowerCase();
+    const hits = people.filter(p => !q || (p.display_name || "").toLowerCase().includes(q) || (p.email || "").toLowerCase().includes(q));
+    list.replaceChildren(...(hits.length ? hits.map(p => h("li", {}, h("button", { type: "button", onclick: ev => add(p, ev.currentTarget) },
+        p.avatar_url ? h("img", { class: "pav", src: p.avatar_url, alt: "" }) : h("span", { class: "pav", "aria-hidden": "true" }, initials(p.display_name)),
+        h("span", { style: "min-width:0" }, h("b", {}, p.display_name, p.is_commissioner ? " (Commissioner)" : ""), h("small", {}, p.email)))))
+      : [h("li", { style: "padding:10px;color:var(--muted)" }, people.length ? "No one matches that search." : "Everyone with a login is already an admin here.")]));
+  };
+  search.addEventListener("input", draw);
+  draw();
+  const scrim = h("div", { class: "scrim", onclick: e => { if (e.target === scrim) close(); } },
+    h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": "Add admin" },
+      h("h3", {}, "Add admin"), h("p", {}, "Tap a person to make them an admin of this community."),
+      search, list,
+      h("p", { class: "fine" }, "Not listed? They need to create a login first."),
+      h("div", { class: "mbtns" }, btn("Close", close))));
+  document.body.append(scrim);
+  document.addEventListener("keydown", onKey);
+  search.focus();
 }
 
 async function removeAdmin(cid, a) {
