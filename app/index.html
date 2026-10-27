@@ -119,6 +119,14 @@ h2{font:700 20px/1.2 var(--ui);margin:28px 0 10px}
 .commlist{margin:6px 0 4px;padding-left:2px}
 .person .actions{margin:10px 0 0}
 .list a:hover{text-decoration:underline}
+/* The whole row opens the link, not just its words. Buttons in the row sit above it. */
+.list li{position:relative}
+.list li > a:first-child::after,.list li > div:first-child > a:first-child::after{content:"";position:absolute;inset:0;border-radius:inherit}
+.list li .btn,.list li .chips,.list li button,.list li input,.list li select{position:relative;z-index:1}
+.list li:has(> a:first-child, > div:first-child > a:first-child){cursor:pointer}
+.list li:has(> a:first-child, > div:first-child > a:first-child):hover{background:var(--pick-h)}
+.list li:has(> a:first-child:focus-visible, > div:first-child > a:first-child:focus-visible){outline:3px solid #7FA6FF;outline-offset:2px}
+.list li a:focus-visible{outline:none}
 .meta{font-size:14px;color:var(--chalk-dim)}
 .empty{color:var(--chalk-dim);padding:18px 0}
 .err{color:var(--err)}
@@ -1026,7 +1034,7 @@ async function viewHome() {
           btn("Cancel", async () => { try { must(await sb.rpc("cancel_creator_invite", { c: i.code })); route(); toast("Invite canceled"); } catch (e) { toast(e.message, true); } }, "danger")))))] : null,
     isPlayerOnly ? null : list.length
       ? h("ul", { class: "list" }, list.map(c => h("li", {}, h("a", { href: "#/c/" + c.id }, c.name, c.is_practice && h("span", { class: "ptag" }, "Practice")),
-          isSuper() && btn("Rename", () => renameCommunity(c)))))
+          isSuper() && h("div", { class: "chips" }, btn("Rename", () => renameCommunity(c)), btn("Delete", () => deleteCommunity(c), "danger")))))
       : h("p", { class: "empty" }, isSuper()
           ? "Create a community to start adding board sets."
           : "You aren't an admin on any community yet. To start your own, ask a Commissioner for an invite link."),
@@ -1675,6 +1683,7 @@ async function viewCommunity(id, tab = "") {
       h("h1", { style: "margin:0" }, c.name),
       h("div", { class: "btns" },
         iconBtn("edit", "Rename community", () => renameCommunity(c)),
+        isSuper() && iconBtn("trash", "Delete community", () => deleteCommunity(c), "bad"),
         tab === "" && iconBtn("plus", "New game week", () => newWeek(id, weeksForForm), "solid"),
         tab === "pools" && playoffs && iconBtn("plus", "New pool", () => newPool(id), "solid"),
         tab === "vote" && iconBtn("plus", "New vote", () => newVote(c), "solid"))),
