@@ -509,6 +509,23 @@ main.wide{max-width:1400px}
 .mbtns{grid-column:span 2;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:6px}
 .mbtns .btn{box-shadow:inset 0 0 0 1px #C9C9C9}
 .mbtns .btn.primary{box-shadow:none}
+/* Plan picker (inside the paper modal) */
+.plans{display:grid;gap:8px;margin:4px 0 10px}
+.plan{display:grid;grid-template-columns:minmax(0,1fr) 128px;align-items:baseline;gap:2px 14px;width:100%;text-align:left;padding:12px 14px;border-radius:10px;
+  border:1px solid #E2DACF;background:#FFFFFF;color:var(--ink);cursor:pointer;font:inherit}
+.plan:hover{border-color:#1F1915}
+@media (max-width:480px){.plan{grid-template-columns:minmax(0,1fr) 104px;gap:2px 10px}}
+.plan:disabled{opacity:.55;cursor:wait}
+.plan b{font-weight:700;font-size:17px}
+.plan .price{font:800 26px/1 var(--display);letter-spacing:.3px;color:var(--ink);text-align:right}
+.plan .why{font-size:14px;color:var(--muted)}
+.plan .then{font-size:12px;line-height:1.3;color:var(--muted);text-align:right;align-self:start}
+.plan b,.plan .why,.plan .then{color:inherit}.plan .why,.plan .then{color:var(--muted)}
+.modal select.sport{width:100%;margin:0 0 10px;padding:9px 10px;border-radius:8px;border:1px solid #D6CCBF;font:inherit;background:#fff;color:var(--ink)}
+.fine{font-size:13px;color:var(--muted);margin:6px 0 0}
+.rbanner{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:10px 0 14px;padding:12px 14px;border-radius:12px;
+  background:rgba(179,38,30,.1);box-shadow:inset 0 0 0 1px rgba(179,38,30,.45)}
+.rbanner span{color:var(--chalk-dim)}
 .toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--paper);color:var(--ink);padding:10px 16px;border-radius:8px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.4);z-index:60;max-width:90vw}
 .toast.bad{background:#FFDAD6;color:#410002}
 @media (prefers-reduced-motion:no-preference){.modal{animation:up .16s ease-out}@keyframes up{from{transform:translateY(12px);opacity:0}}}
@@ -583,6 +600,7 @@ function textOn(hex) {
   return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? "#1D1D1D" : "#FFFFFF";
 }
 function toast(msg, bad = false) {
+  msg = String(msg).replace(/^(PLAN_NEEDED|PLAYOFFS_NEEDED): /, "");
   document.querySelectorAll(".toast").forEach(t => t.remove());
   const t = h("div", { class: "toast" + (bad ? " bad" : ""), role: "status" }, msg);
   document.body.append(t);
@@ -638,11 +656,12 @@ const confirmBox = (title, text, ok, okClass = "danger") => modal({ title, text,
 /* ---------- Auth state ---------- */
 async function loadMe() {
   // Bracket pools switch (the owner turns it on for everyone)
-  const sw = await sb.from("app_settings").select("key,value").in("key", ["pools_enabled", "commissioner_unlock", "votes_enabled"]);
+  const sw = await sb.from("app_settings").select("key,value").in("key", ["pools_enabled", "commissioner_unlock", "votes_enabled", "paid_plans_live"]);
   const setting = k => (sw.data || []).find(r => r.key === k)?.value === true;
   S.poolsOn = setting("pools_enabled");
   S.commUnlock = setting("commissioner_unlock");
   S.votesOn = setting("votes_enabled");
+  S.paidOn = setting("paid_plans_live");
   S.session = must(await sb.auth.getSession()).session;
   S.me = null; S.admin = new Set();
   if (!S.session) return;
@@ -756,6 +775,7 @@ const ICONS = {
   back: '<path d="M15 18l-6-6 6-6"/>',
   edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>',
   trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>',
@@ -843,12 +863,14 @@ async function route() {
     if (key === "j" && id) return await joinFromLink(id);
     if (key === "i" && id) return await joinCommunityLink(id);
     if (key === "help") return viewHelp();
+    if (key === "start" && id) return await viewStart(id);
     if (key === "v" && id) return await viewVote(id);
     if (key === "login" || !S.session) return viewLogin();
     if (key === "c" && id) return await viewCommunity(id, sub);
     if (key === "people") return await viewPeople();
     if (key === "me") return await viewProfile();
     if (key === "preview") return viewPreview();
+    if (key === "billing") return await viewBilling();
     await viewHome();
     if (S.me && (!S.me.first_name || !S.me.last_name) && !S.askedName) { S.askedName = true; editName(true); }
     return;
@@ -972,6 +994,9 @@ async function viewHome() {
   const waiting = reqs.length;
   const myReq = S.me && !isSuper() && !isComm() ? must(await sb.from("access_requests").select("id,kind,new_name,status,community_id,created_at")
     .eq("user_id", S.me.id).order("created_at", { ascending: false }).limit(1).maybeSingle()) : null;
+  const invites = totalAccess(S.me) ? (must(await sb.rpc("open_creator_invites")) || []) : [];
+  const handed = S.me ? (must(await sb.rpc("my_pending_transfers")) || []) : [];
+  const canStart = S.me && !totalAccess(S.me) && !!must(await sb.rpc("billing_community_access"))?.allowed;
   const codeBox = h("input", { type: "text", class: "search", placeholder: "Access code", autocomplete: "off", maxlength: 12, style: "max-width:200px;margin:0" });
   render(
     joined.length ? [h("h1", {}, "My communities"),
@@ -988,15 +1013,23 @@ async function viewHome() {
         h("div", {}, h("a", { href: "#/p/" + p.pool_id }, p.name),
           h("div", { class: "meta" }, `${poolKindLabel(p)} ${seasonLabel("College Football", p.season)}: ${p.picks_done} of ${p.games} picked`)))))] : null,
     waiting ? [h("h1", {}, `Admin requests (${waiting})`), h("div", { class: "people", style: "margin-bottom:22px" }, reqs.map(reqCard))] : null,
+    handed.length ? transferList(handed) : null,
     isPlayerOnly ? null : h("h1", {}, "Communities"),
     (isSuper() || isComm()) && h("div", { class: "actions" }, btn("New community", newCommunity, "primary"),
+      btn("Invite a community creator", inviteCreator),
       isSuper() && h("a", { class: "btn", href: "#/people" }, waiting ? `People (${waiting})` : "People")),
+    canStart && h("div", { class: "actions" }, btn("Start a community", startCommunity, "primary")),
+    invites.length ? [h("p", { class: "seclbl", style: "margin-top:4px" }, `Unused creator invites (${invites.length})`),
+      h("ul", { class: "list", style: "margin-bottom:18px" }, invites.map(i => h("li", {},
+        h("div", {}, h("b", {}, i.note || "No note"), h("div", { class: "meta" }, `Made by ${i.created_by_name}, ${lockTime(i.created_at)}`)),
+        h("div", { class: "chips" }, btn("Copy link", () => copy(link("#/start/" + i.code))),
+          btn("Cancel", async () => { try { must(await sb.rpc("cancel_creator_invite", { c: i.code })); route(); toast("Invite canceled"); } catch (e) { toast(e.message, true); } }, "danger")))))] : null,
     isPlayerOnly ? null : list.length
       ? h("ul", { class: "list" }, list.map(c => h("li", {}, h("a", { href: "#/c/" + c.id }, c.name, c.is_practice && h("span", { class: "ptag" }, "Practice")),
           isSuper() && btn("Rename", () => renameCommunity(c)))))
       : h("p", { class: "empty" }, isSuper()
           ? "Create a community to start adding board sets."
-          : "You aren't an admin on any community yet."),
+          : "You aren't an admin on any community yet. To start your own, ask a Commissioner for an invite link."),
     S.me && !isSuper() && !isComm() ? requestBlock(all, myReq) : null
   );
 }
@@ -1074,6 +1107,246 @@ async function newCommunity() {
   catch (e) { toast(e.message, true); }
 }
 
+
+
+/* ---------- Plans and billing ----------
+   The person who created a community pays for it. Prices include the service fee.
+   Week and Month plans cover one sport and stop at that sport's regular-season end (from ESPN, at checkout).
+   Month plans bill on the 1st: full first month on the 1st-15th, half after. No refunds; plans run to the end of the paid time.
+   Nothing here is enforced until the owner turns on Paid plans; the database checks the same rules. */
+const PLAN_LEAGUES = ["College Football", "NFL", "NBA", "Men's College Basketball", "Women's College Basketball", "WNBA"];
+const SPORT_PLANS = ["unlimited_week", "unlimited_month", "playoffs"];
+const money = n => "$" + Number(n).toFixed(2);
+const ctDay = () => Number(new Intl.DateTimeFormat("en-US", { timeZone: TZ, day: "numeric" }).format(new Date()));
+const ctDate = t => t ? new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: TZ }) : "";
+function planCatalog(sport) {
+  const half = ctDay() >= 16, s = sport || "the sport you pick";
+  return {
+    single_board: { name: "Single board", price: 5.50, then: "Paid once",
+      why: "One board in this community. Buy the next one when you need it." },
+    unlimited_week: { name: "Unlimited week", price: 10.75, then: "Renews weekly",
+      why: `Unlimited ${s} boards in this community. Stops on its own when the regular season ends.` },
+    unlimited_month: { name: "Unlimited month", price: half ? 16 : 31.50, then: half ? "Half month now, $31.50 on the 1st" : "$31.50 on the 1st after that",
+      why: `Unlimited ${s} boards in this community. Stops on its own when the regular season ends.` },
+    unlimited_communities: { name: "Unlimited communities", price: half ? 26.25 : 52.25, then: half ? "Half month now, $52.25 on the 1st" : "$52.25 on the 1st after that",
+      why: "Every sport in every community you create, and you can start new ones." },
+    playoffs: { name: sport ? `${sport} Playoffs pass` : "Playoffs pass", price: 26.25, then: "Paid once",
+      why: `Bracket pools and pick'em for the ${sport ? sport + " " : ""}postseason.` }
+  };
+}
+const PLAN_NAMES = { single_board: "Single board", unlimited_week: "Unlimited week", unlimited_month: "Unlimited month",
+  unlimited_communities: "Unlimited communities", playoffs: "Playoffs pass" };
+
+async function checkout(plan, body) {
+  try {
+    const { data, error } = await sb.functions.invoke("create-checkout", { body: { plan, ...body } });
+    if (error) {
+      let msg = error.message;
+      try { msg = (await error.context.json()).error || msg; } catch { /* keep the generic message */ }
+      throw new Error(msg);
+    }
+    if (!data?.url) throw new Error(data?.error || "Checkout didn't open. Try again.");
+    location.href = data.url;
+    return true;
+  } catch (e) { toast(e.message, true); return false; }
+}
+async function openPortal() {
+  try {
+    const { data, error } = await sb.functions.invoke("billing-portal", { body: {} });
+    if (error) {
+      let msg = error.message;
+      try { msg = (await error.context.json()).error || msg; } catch { /* keep the generic message */ }
+      throw new Error(msg);
+    }
+    location.href = data.url;
+  } catch (e) { toast(e.message, true); }
+}
+
+// need: "board" (a community's board plans), "community" (more communities), "playoffs"
+function planPicker({ cid = null, cname = "", league = "", need = "board", transferId = null, why = "" }) {
+  const keys = { board: ["single_board", "unlimited_week", "unlimited_month", "unlimited_communities"],
+    community: ["unlimited_communities"], playoffs: ["playoffs"] }[need] || [];
+  let sport = PLAN_LEAGUES.includes(league) ? league : "";
+  const pickSport = keys.some(k => SPORT_PLANS.includes(k)) && !(need === "playoffs" && sport);
+  const close = () => { scrim.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = e => { if (e.key === "Escape") close(); };
+  const sel = pickSport && h("select", { class: "sport", "aria-label": "Sport", onchange: e => { sport = e.target.value; draw(); } },
+    h("option", { value: "" }, "Sport for the week, month, or playoffs plan"),
+    PLAN_LEAGUES.map(x => h("option", { value: x, selected: x === sport }, x)));
+  const box = h("div", { class: "plans" });
+  function draw() {
+    const cat = planCatalog(sport);
+    box.replaceChildren(...keys.map(k => {
+      const p = cat[k];
+      return h("button", { type: "button", class: "plan", onclick: async ev => {
+          const b = ev.currentTarget;
+          if (SPORT_PLANS.includes(k) && !sport) { toast("Pick a sport first.", true); sel && sel.focus(); return; }
+          b.disabled = true;
+          if (!await checkout(k, { community_id: cid, league: SPORT_PLANS.includes(k) ? sport : null, transfer_id: transferId })) b.disabled = false;
+        } },
+        h("b", {}, p.name), h("span", { class: "price" }, money(p.price)),
+        h("span", { class: "why" }, p.why), h("span", { class: "then" }, p.then));
+    }));
+  }
+  draw();
+  const title = transferId ? `Take over ${cname}` : need === "community" ? "Start more communities"
+    : need === "playoffs" ? "Get a Playoffs pass" : cname ? `Pick a plan for ${cname}` : "Pick a plan";
+  const text = why || (transferId ? "Pick the plan you'll pay for. If the current owner has paid time left, your billing starts when it runs out, and the community moves to you once checkout is done."
+    : need === "board" ? "Pick how you want to pay for boards here. You'll finish on Stripe's secure checkout." : "");
+  const scrim = h("div", { class: "scrim", onclick: e => { if (e.target === scrim) close(); } },
+    h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": title },
+      h("h3", {}, title), text && h("p", {}, text), sel, box,
+      h("p", { class: "fine" }, "Prices include the service fee. Plans run to the end of the time you've paid for. No refunds."),
+      h("div", { class: "mbtns" }, btn("Close", close))));
+  document.body.append(scrim);
+  document.addEventListener("keydown", onKey);
+  (sel || box.querySelector(".plan"))?.focus();
+}
+
+// Before a board is added: is it covered? If not, the creator gets the plan picker.
+async function boardGate(cid, league) {
+  if (!S.paidOn) return true;
+  const a = must(await sb.rpc("billing_board_access", { cid, lg: league || null }));
+  if (a?.allowed) return true;
+  if (a?.reason === "needs_plan" && a.is_payer) {
+    const c = must(await sb.from("communities").select("name").eq("id", cid).maybeSingle());
+    planPicker({ cid, cname: c?.name || "", league, need: "board", why: "Your free board is used up, or your plan ended. Pick a plan to keep adding boards." });
+  } else if (a?.reason === "needs_plan") {
+    toast("This community's creator needs to pick a plan before more boards can be added.", true);
+  } else toast("You can't add boards here.", true);
+  return false;
+}
+
+// Plan tab on a community (its creator, and the owner)
+async function planTab(c) {
+  const mine = c.owner_id === S.me?.id;
+  const pending = must(await sb.from("community_transfers").select("id,to_user,created_at").eq("community_id", c.id).eq("status", "pending").maybeSingle());
+  const toName = pending ? must(await sb.rpc("shown_name", { uid: pending.to_user })) : "";
+  return h("div", {},
+    h("p", { class: "seclbl", style: "margin-top:8px" }, "Plan"),
+    totalAccess(S.me) && mine ? h("p", { class: "meta" }, "You have Free Total Access. Every plan is included.")
+      : c.comped ? h("p", { class: "meta" }, "This community is free. No plan needed.")
+      : mine ? [h("p", { class: "meta" }, "You created this community, so you pay for its plan. See what you have on Plans and billing."),
+          h("div", { class: "actions" },
+            btn("Pick a plan", () => planPicker({ cid: c.id, cname: c.name, need: "board" }), "primary"),
+            btn("Get a Playoffs pass", () => planPicker({ cid: c.id, cname: c.name, need: "playoffs" })),
+            h("a", { class: "btn", href: "#/billing" }, "Plans and billing"))]
+      : h("p", { class: "meta" }, "Only this community's creator can buy its plan."),
+    h("p", { class: "seclbl", style: "margin-top:24px" }, "Hand off this community"),
+    pending
+      ? h("ul", { class: "list" }, h("li", {},
+          h("div", {}, h("b", {}, `Waiting on ${toName}`), h("div", { class: "meta" }, `Sent ${lockTime(pending.created_at)}. It moves once they pick a plan.`)),
+          btn("Cancel hand-off", async () => { try { must(await sb.rpc("cancel_transfer", { tid: pending.id })); route(); toast("Hand-off canceled"); } catch (e) { toast(e.message, true); } }, "danger")))
+      : [h("p", { class: "meta" }, "The new owner has to pick a plan and pay before the community moves to them. Your plan runs to the end of your paid time, with no refund."),
+         h("div", { class: "actions" }, btn("Hand off", () => handOff(c)))]);
+}
+async function handOff(c) {
+  const v = await modal({ title: `Hand off ${c.name}`, text: "Enter the login email of the new owner. They need a Game Town Square login first.",
+    fields: [{ name: "email", label: "Their login email", type: "email", required: true, autocomplete: "off" }], ok: "Send hand-off" });
+  if (!v) return;
+  try { must(await sb.rpc("request_transfer", { cid: c.id, to_email: v.email })); route(); toast("Hand-off sent. They'll see it on their home screen."); }
+  catch (e) { toast(e.message, true); }
+}
+// Communities someone is handing to me
+function transferList(rows) {
+  return [h("h1", {}, "Communities handed to you"),
+    h("ul", { class: "list", style: "margin-bottom:22px" }, rows.map(t => h("li", {},
+      h("div", {}, h("b", {}, t.community_name), h("div", { class: "meta" }, `${t.from_name} wants to hand it to you. Pick a plan to take it over.`)),
+      h("div", { class: "chips" },
+        btn("Pick a plan", () => planPicker({ cid: t.community_id, cname: t.community_name, need: "board", transferId: t.id }), "primary"),
+        btn("Decline", async () => { try { must(await sb.rpc("cancel_transfer", { tid: t.id })); route(); toast("Declined"); } catch (e) { toast(e.message, true); } }, "danger")))))];
+}
+
+// Commissioners: one-time link for someone to start their own community
+async function inviteCreator() {
+  const v = await modal({ title: "Invite a community creator",
+    text: "You get a one-time link. Whoever opens it signs in, names their community, and starts on the free package.",
+    fields: [{ name: "note", label: "Who it's for (only Commissioners see this)", maxlength: 80 }], ok: "Make link" });
+  if (!v) return;
+  try { const code = must(await sb.rpc("make_creator_invite", { msg: v.note || "" })); await copy(link("#/start/" + code)); route(); }
+  catch (e) { toast(e.message, true); }
+}
+// Unlimited communities: start another one
+async function startCommunity() {
+  const v = await modal({ title: "Start a community", fields: [{ name: "name", label: "Community name", required: true, maxlength: 80 }], ok: "Create community" });
+  if (!v || !v.name.trim()) return;
+  try { const cid = must(await sb.rpc("create_my_community", { nm: v.name.trim() })); await loadMe(); go("#/c/" + cid); }
+  catch (e) { toast(e.message, true); }
+}
+// Creator invite link: #/start/CODE
+async function viewStart(code) {
+  if (!S.session) { setNext("#/start/" + code); return viewLogin("create"); }
+  if (!must(await sb.rpc("creator_invite_ok", { c: code }))) {
+    return render(h("div", { class: "panel" }, h("h1", {}, "Invite link not valid"),
+      h("p", {}, "It was already used or canceled. Ask a Commissioner for a new one."), h("a", { class: "btn", href: "#/" }, "Go home")));
+  }
+  const name = h("input", { type: "text", maxlength: 80, required: true, autocomplete: "off", placeholder: "Community name" });
+  const make = async () => {
+    if (!name.value.trim()) return toast("Enter a name for your community.", true);
+    try { const cid = must(await sb.rpc("redeem_creator_invite", { c: code, nm: name.value.trim() })); await loadMe(); toast("Your community is ready"); go("#/c/" + cid); }
+    catch (e) { toast(e.message, true); }
+  };
+  render(h("div", { class: "panel" }, h("h1", {}, "Start your community"),
+    h("p", {}, "Name it. You'll be its creator. It starts on the free package: one board a month for your first 3 months."),
+    h("form", { class: "mform", onsubmit: e => { e.preventDefault(); make(); } },
+      h("label", {}, h("span", {}, "Community name"), name),
+      h("div", { class: "mbtns" }, h("button", { class: "btn primary", type: "submit" }, "Create community")))));
+  name.focus();
+}
+// #/billing
+async function viewBilling() {
+  if (!S.session) { setNext("#/billing"); return viewLogin(); }
+  const st = new URLSearchParams(location.hash.split("?")[1] || "").get("status");
+  if (st) {
+    history.replaceState(null, "", "#/billing");
+    toast(st === "success" ? "Payment received. Your plan shows here in a few seconds." : "Checkout canceled. Nothing was charged.", st !== "success");
+    if (st === "success") setTimeout(() => { if (location.hash === "#/billing") route(); }, 4000);
+  }
+  const [plans, handed, owned] = await Promise.all([
+    sb.rpc("my_plans").then(must), sb.rpc("my_pending_transfers").then(must),
+    sb.from("communities").select("id,name,comped").eq("owner_id", S.me.id).order("name").then(must)]);
+  const live = (plans || []).filter(p => ["active", "past_due", "pending"].includes(p.status) && !(p.plan === "single_board" && p.board_id));
+  const past = (plans || []).filter(p => !live.includes(p));
+  const statusOf = p => {
+    if (p.status === "past_due") return "Payment failed. Update your card in Manage billing.";
+    if (p.status === "pending") return "Waiting on payment";
+    if (p.plan === "single_board") return p.board_id ? "Used on a board" : "Ready. Add a board to use it.";
+    if (p.status === "canceled" || p.status === "expired") return "Ended";
+    if (p.plan === "playoffs") return `Good through ${ctDate(p.ends_at)}`;
+    return p.cancel_at_period_end ? `Ends ${ctDate(p.ends_at)}` : "Renews automatically";
+  };
+  const what = p => [p.league, p.community_name].filter(Boolean).join(", ") || (p.plan === "unlimited_communities" ? "All your communities" : "");
+  const row = p => h("li", {}, h("div", {}, h("b", {}, PLAN_NAMES[p.plan] || p.plan),
+    what(p) && h("div", { class: "meta" }, what(p)), h("div", { class: "meta" }, statusOf(p))));
+  render(
+    h("div", { class: "crumbs" }, h("a", { href: "#/" }, "Home")),
+    h("h1", {}, "Plans and billing"),
+    h("p", { class: "sub" }, totalAccess(S.me) ? "You have Free Total Access. Every plan is included."
+      : "Whoever creates a community pays for its plan. Players never pay."),
+    handed.length ? transferList(handed) : null,
+    owned.length && !totalAccess(S.me) ? [h("h2", {}, "Your communities"),
+      h("ul", { class: "list" }, owned.map(c => h("li", {}, h("a", { href: "#/c/" + c.id }, c.name),
+        c.comped ? h("span", { class: "chip" }, "Free") : btn("Pick a plan", () => planPicker({ cid: c.id, cname: c.name, need: "board" }))))),
+      h("div", { class: "actions" },
+        btn("Get a Playoffs pass", () => planPicker({ cid: owned[0].id, need: "playoffs" })),
+        btn("Start more communities", () => planPicker({ need: "community" })))] : null,
+    h("h2", {}, "Your plans"),
+    live.length ? h("ul", { class: "list" }, live.map(row)) : h("p", { class: "empty" }, "No active plans."),
+    plans.length ? h("div", { class: "actions" }, btn("Manage billing", openPortal, "primary")) : null,
+    plans.length ? h("p", { class: "meta" }, "Manage billing opens Stripe, where you can update your card, see receipts, or cancel. Canceled plans run to the end of the time you've paid for.") : null,
+    past.length ? [h("h2", {}, "Past plans"), h("ul", { class: "list" }, past.map(row))] : null);
+}
+async function togglePaid() {
+  const on = !S.paidOn;
+  if (!await confirmBox(on ? "Turn on paid plans?" : "Turn off paid plans?",
+    on ? "Community creators will need a plan for new boards, pools, and extra communities. Commissioners, you, and free communities are not affected."
+       : "Everyone can add boards, pools, and communities without a plan. Billing and existing plans are untouched.",
+    on ? "Turn on" : "Turn off", on ? "primary" : "danger")) return;
+  try {
+    must(await sb.from("app_settings").update({ value: on, updated_at: new Date().toISOString() }).eq("key", "paid_plans_live"));
+    await loadMe(); route(); toast(on ? "Paid plans are on" : "Paid plans are off");
+  } catch (e) { toast(e.message, true); }
+}
 
 /* ---------- People (super admin only) ---------- */
 async function viewPeople() {
@@ -1390,7 +1663,10 @@ async function viewCommunity(id, tab = "") {
   }
   // Pools need the Playoffs add-on on the community's creator (Commissioners and the Board Master always have it)
   const playoffs = tab === "pools" ? !!must(await sb.rpc("community_playoffs", { cid: id })) : true;
-  const tabs = [["", "Squares", "squares"], ["players", "Players", "admins"], votesShown() && ["vote", "Vote", "vote"], poolsShown() && ["pools", "Pools", "pools"], (isSuper() || isCommish(id)) && ["admins", "Admins", "admins"]].filter(Boolean);
+  const isCreator = c.owner_id === S.me?.id;
+  const tabs = [["", "Squares", "squares"], ["players", "Players", "admins"], votesShown() && ["vote", "Vote", "vote"], poolsShown() && ["pools", "Pools", "pools"], (isSuper() || isCommish(id)) && ["admins", "Admins", "admins"],
+    (isCreator || S.me?.is_owner) && ["plan", "Plan", "card"]].filter(Boolean);
+  const readOnly = S.paidOn && !!must(await sb.rpc("community_read_only", { cid: id }));
   if (!tabs.some(t => t[0] === tab)) tab = "";
 
   const head = [
@@ -1402,6 +1678,10 @@ async function viewCommunity(id, tab = "") {
         tab === "" && iconBtn("plus", "New game week", () => newWeek(id, weeksForForm), "solid"),
         tab === "pools" && playoffs && iconBtn("plus", "New pool", () => newPool(id), "solid"),
         tab === "vote" && iconBtn("plus", "New vote", () => newVote(c), "solid"))),
+    readOnly && h("div", { class: "rbanner" },
+      h("div", {}, h("b", {}, "Plan ended. "),
+        h("span", {}, "Everything here stays visible, but new boards and pools are off until the creator picks a plan.")),
+      isCreator && btn("Pick a plan", () => planPicker({ cid: id, cname: c.name, need: "board" }), "primary")),
     // Practice community: sample boards for every scoring style; safe to try anything, reset any time
     c.is_practice && h("div", { class: "practice" },
       h("div", {}, h("b", {}, "Practice area. "),
@@ -1415,6 +1695,8 @@ async function viewCommunity(id, tab = "") {
   const body = [];
 
   if (tab === "players") body.push(await playersTab(c));
+
+  if (tab === "plan") body.push(await planTab(c));
 
   if (tab === "vote") {
     const polls = must(await sb.from("polls").select("id,league,season,label,games,closes_at,closed,created_at").eq("community_id", id).order("created_at", { ascending: false }));
@@ -1495,8 +1777,11 @@ async function viewCommunity(id, tab = "") {
     body.push(
       h("p", { class: "seclbl", style: "margin-top:8px" }, "Bracket pools"),
       !S.poolsOn && h("p", { class: "meta" }, "Hidden. Only you can see pools until you turn them on from the home screen."),
-      !playoffs && h("div", { class: "panel" }, h("p", { style: "margin:0" }, h("b", {}, "Playoffs add-on needed. "),
-        "Playoff brackets and bowl pick'em are an add-on for the admin who created this community. Ask the Board Master to add it.")),
+      !playoffs && h("div", { class: "panel" }, h("p", { style: "margin:0 0 10px" }, h("b", {}, "Playoffs pass needed. "),
+        c.owner_id === S.me?.id
+          ? "Playoff brackets and bowl pick'em need a Playoffs pass for each sport."
+          : "Playoff brackets and bowl pick'em need a Playoffs pass. Ask this community's creator to get one."),
+        c.owner_id === S.me?.id && btn("Get a Playoffs pass", () => planPicker({ cid: id, cname: c.name, need: "playoffs" }), "primary")),
       pools.length
         ? h("ul", { class: "list" }, pools.map(p => h("li", {},
             h("div", {}, h("a", { href: "#/p/" + p.id }, p.name),
@@ -2057,6 +2342,7 @@ function boardBlock(b, mg, ctx) {
           { label: "Bracket pools", toggle: !!S.poolsOn, fn: togglePools },
           { label: "Vote pages", toggle: !!S.votesOn, fn: toggleVotes },
           { label: "Commissioner unlock", toggle: !!S.commUnlock, fn: toggleCommUnlock },
+          { label: "Paid plans", toggle: !!S.paidOn, fn: togglePaid },
           { label: "What's coming", fn: () => go("#/preview") }] : []),
         mg && !b.locked && "-",
         mg && !b.locked && { label: "Delete board", fn: () => deleteBoard(b), cls: "danger" }
@@ -2305,6 +2591,8 @@ function cleanDetails(v, league) {
 }
 
 async function addBoard(set, count, pre = {}, onDone = null) {
+  const cid = set.community_id || must(await sb.from("board_sets").select("community_id").eq("id", set.id).single()).community_id;
+  if (!await boardGate(cid, set.weeks?.league)) return;
   teamDatalist(); setList("sport-list", SPORTS);
   const sport = leagueFor(set.weeks?.league)?.sport ?? "";
   const v = await modal({ title: "Add board", fields: detailFields({ sport, ...pre }, set.weeks?.league), ok: "Add board", after: wireTeams });
@@ -2313,7 +2601,10 @@ async function addBoard(set, count, pre = {}, onDone = null) {
     let row = must(await sb.from("boards").insert({ set_id: set.id, sort_order: count, ...cleanDetails(v, set.weeks?.league) }).select().single());
     row = await attachLogos(row, set.weeks?.league);
     onDone ? await onDone(row) : route();
-  } catch (e) { toast(e.message, true); }
+  } catch (e) {
+    if (/PLAN_NEEDED/.test(e.message)) return boardGate(cid, set.weeks?.league);
+    toast(e.message, true);
+  }
 }
 
 async function editDetails(b, refresh, league) {
@@ -2744,6 +3035,7 @@ function profileMenu() {
     S.me?.email && { note: S.me.email },
     { label: "My profile and squares", fn: () => go("#/me") },
     { label: "Change my name", fn: () => editName() },
+    { label: "Plans and billing", fn: () => go("#/billing") },
     "-",
     { label: "Help and guides", fn: () => go("#/help") },
     { label: "Sign out", fn: signOut, cls: "danger" }]);
@@ -2754,6 +3046,7 @@ function ownerMenu() {
     { label: "Bracket pools", toggle: !!S.poolsOn, fn: togglePools },
     { label: "Vote pages", toggle: !!S.votesOn, fn: toggleVotes },
     { label: "Commissioner unlock", toggle: !!S.commUnlock, fn: toggleCommUnlock },
+    { label: "Paid plans", toggle: !!S.paidOn, fn: togglePaid },
     "-",
     { label: "What's coming", fn: () => go("#/preview") },
     { label: "People", fn: () => go("#/people") },
@@ -3148,6 +3441,14 @@ async function newPool(cid) {
       if (Object.values(names).includes(inputs.name.value)) inputs.name.value = names[inputs.kind.value];
     }) });
   if (!v || !v.name.trim()) return;
+  const poolLeague = v.kind === "nfl" ? "NFL" : "College Football";
+  if (S.paidOn) {
+    const a = must(await sb.rpc("playoffs_access", { cid, lg: poolLeague }));
+    if (!a?.allowed) {
+      if (a?.is_payer) return planPicker({ cid, league: poolLeague, need: "playoffs" });
+      return toast(`This community's creator needs a ${poolLeague} Playoffs pass first.`, true);
+    }
+  }
   try {
     const row = must(await sb.from("pools").insert({ community_id: cid, kind: v.kind, name: v.name.trim(), season: Number(v.season) }).select("id").single());
     go("#/p/" + row.id);
