@@ -133,6 +133,17 @@ h2{font:700 20px/1.2 var(--ui);margin:28px 0 10px}
 .cfind input{flex:1 1 220px;max-width:none;margin:0}
 .cfind select{min-height:42px;padding:8px 10px;border-radius:10px;border:0;font:inherit;font-weight:600;color:var(--chalk);background:var(--btn);box-shadow:var(--btn-edge)}
 .cgroup{font:700 15px/1.2 var(--ui);color:var(--chalk-dim);margin:16px 0 8px}
+.gtags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.gtags .chip{font-weight:600}
+.glist{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:4px}
+.gpick{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;color:var(--ink);cursor:pointer}
+.gpick:hover{background:#F3EDE4}
+.gpick.off{opacity:.55;cursor:default}
+.gpick input{width:18px;height:18px;margin:0}
+.gman{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.gman li{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:8px;background:#F6F2EC;color:var(--ink)}
+.gman .chips{flex-wrap:nowrap}
+.cfind > .btn{min-height:42px}
 @media (max-width:560px){.list li.crow{flex-wrap:wrap}.list li.crow > div:first-child{flex:1 1 100%}.list li.crow .chips{flex-wrap:nowrap}}
 .meta{font-size:14px;color:var(--chalk-dim)}
 .empty{color:var(--chalk-dim);padding:18px 0}
@@ -801,6 +812,7 @@ const ICONS = {
   card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>',
   trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/>',
   star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9Z"/>',
+  tag: '<path d="M3 12V4h8l10 10-8 8Z"/><circle cx="7.5" cy="8.5" r="1.5"/>',
   starOn: '<path fill="currentColor" d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9Z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>',
@@ -1053,7 +1065,7 @@ async function viewHome() {
         h("div", { class: "chips" }, btn("Copy link", () => copy(link("#/start/" + i.code))),
           btn("Cancel", async () => { try { must(await sb.rpc("cancel_creator_invite", { c: i.code })); route(); toast("Invite canceled"); } catch (e) { toast(e.message, true); } }, "danger")))))] : null,
     isPlayerOnly ? null : (list.length || homeRows.length)
-      ? homeCommunityLists(homeRows)
+      ? await homeCommunityLists(homeRows)
       : h("p", { class: "empty" }, isSuper()
           ? "Create a community to start adding board sets."
           : "You aren't an admin on any community yet. To start your own, ask a Commissioner for an invite link."),
@@ -1066,13 +1078,17 @@ async function viewHome() {
    Yours on top (you created it, admin it, or starred it), A to Z.
    Everyone else's below, with a search box and a sort that this device remembers. */
 const CSORT_KEY = "gts-csort";
-function homeCommunityLists(rows) {
+async function homeCommunityLists(rows) {
   const me = S.me?.id;
-  const isMine = c => c.pinned || c.is_admin || c.paying || c.linked || c.owner_id === me;
+  const groups = must(await sb.from("community_groups").select("id,name,owner_id").order("name")) || [];
+  const gname = new Map(groups.map(g => [g.id, g.name]));
+  const gsort = (a, b) => (gname.get(a) || "").localeCompare(gname.get(b) || "");
+  // Practice Field always sits at the top of Everyone else's, never in Yours
+  const isMine = c => !c.is_practice && (c.pinned || c.is_admin || c.paying || c.linked || c.owner_id === me);
   // Why it's in Yours when you don't run it
   const tie = c => c.owner_id === me || c.is_admin ? "" : c.paying ? "You pay for its plan"
     : { saved: "You have a saved square here", helper: "You help on a board here", pool: "You're in a pool here", member: "You play here" }[c.linked] || "";
-  const az = (a, b) => (b.is_practice - a.is_practice) || a.name.localeCompare(b.name);
+  const az = (a, b) => a.name.localeCompare(b.name);
   const mine = rows.filter(isMine).sort(az);
   const others = rows.filter(c => !isMine(c));
   const ago = t => {
@@ -1090,41 +1106,150 @@ function homeCommunityLists(rows) {
   const row = c => h("li", { class: "crow" },
     h("div", {},
       h("a", { href: "#/c/" + c.id }, c.name, c.is_practice && h("span", { class: "ptag" }, "Practice")),
-      h("div", { class: "meta" }, [c.owner_name ? `Created by ${c.owner_name}` : "", tie(c), ago(c.last_active)].filter(Boolean).join(". "))),
+      h("div", { class: "meta" }, [c.owner_name ? `Created by ${c.owner_name}` : "", tie(c), ago(c.last_active)].filter(Boolean).join(". ")),
+      (c.group_ids || []).length ? h("div", { class: "gtags" }, [...c.group_ids].sort(gsort).map(g => h("span", { class: "chip" }, gname.get(g)))) : null),
     h("div", { class: "chips" },
       iconBtn(c.pinned ? "starOn" : "star", c.pinned ? `Unstar ${c.name}` : `Star ${c.name}`, () => toggleStar(c), "sm star"),
+      iconBtn("tag", `Groups for ${c.name}`, () => editCommunityGroups(c, groups), "sm"),
       isSuper() && btn("Rename", () => renameCommunity(c)),
       isSuper() && btn("Delete", () => deleteCommunity(c), "danger")));
 
-  const out = [];
-  out.push(h("h2", { style: "margin-top:8px" }, "Yours"),
-    mine.length ? h("ul", { class: "list" }, mine.map(row))
-      : h("p", { class: "empty" }, "Communities you create, run, pay for, or play in show up here. Tap the star on any community below to add it."));
-  if (!others.length) return out;
+  // Group filter: applies to both sections
+  let gfilter = "";
+  const gsel = h("select", { "aria-label": "Filter by group" },
+    h("option", { value: "" }, "All groups"),
+    groups.map(g => h("option", { value: g.id }, g.name + (g.owner_id ? "" : ""))),
+    h("option", { value: "none" }, "No group"));
+  const inGroup = c => !gfilter || (gfilter === "none" ? !(c.group_ids || []).length : (c.group_ids || []).includes(gfilter));
+  const filterBar = h("div", { class: "cfind" }, gsel, btn("Groups", () => manageGroups(groups)));
+
+  const mineBox = h("div");
+  const drawMine = () => {
+    const list = mine.filter(inGroup);
+    mineBox.replaceChildren(list.length ? h("ul", { class: "list" }, list.map(row))
+      : h("p", { class: "empty" }, mine.length ? "None of yours are in that group."
+          : "Communities you create, run, pay for, or play in show up here. Tap the star on any community below to add it."));
+  };
 
   let sort = "active";
   try { sort = localStorage.getItem(CSORT_KEY) || "active"; } catch { /* default */ }
   const search = h("input", { type: "search", class: "search", placeholder: "Search communities or creators", "aria-label": "Search communities or creators", autocomplete: "off" });
   const sel = h("select", { "aria-label": "Sort communities" },
-    [["active", "Recently active"], ["az", "A to Z"], ["creator", "By creator"]].map(([v, l]) => h("option", { value: v, selected: v === sort }, l)));
+    [["active", "Recently active"], ["az", "A to Z"], ["creator", "By creator"], ["group", "By group"]].map(([v, l]) => h("option", { value: v, selected: v === sort }, l)));
   const box = h("div");
-  const draw = () => {
+  const drawOthers = () => {
     const q = search.value.trim().toLowerCase();
-    let list = others.filter(c => !q || c.name.toLowerCase().includes(q) || (c.owner_name || "").toLowerCase().includes(q));
-    if (sort === "az") list.sort((a, b) => a.name.localeCompare(b.name));
-    else if (sort === "creator") list.sort((a, b) => (a.owner_name || "\uffff").localeCompare(b.owner_name || "\uffff") || a.name.localeCompare(b.name));
-    else list.sort((a, b) => Date.parse(b.last_active || 0) - Date.parse(a.last_active || 0));
-    if (!list.length) return box.replaceChildren(h("p", { class: "empty" }, `No communities match "${search.value.trim()}".`));
-    if (sort !== "creator") return box.replaceChildren(h("ul", { class: "list" }, list.map(row)));
-    const groups = new Map();
-    for (const c of list) { const k = c.owner_name || "No creator on record"; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(c); }
-    box.replaceChildren(...[...groups].flatMap(([k, cs]) => [h("p", { class: "cgroup" }, k), h("ul", { class: "list" }, cs.map(row))]));
+    let list = others.filter(inGroup).filter(c => !q || c.name.toLowerCase().includes(q) || (c.owner_name || "").toLowerCase().includes(q));
+    if (sort === "active") list.sort((a, b) => Date.parse(b.last_active || 0) - Date.parse(a.last_active || 0));
+    else if (sort === "creator") list.sort((a, b) => (a.owner_name || "\uffff").localeCompare(b.owner_name || "\uffff") || az(a, b));
+    else list.sort(az);
+    const practice = list.filter(c => c.is_practice);
+    const rest = list.filter(c => !c.is_practice);
+    if (!list.length) return box.replaceChildren(h("p", { class: "empty" }, q ? `No communities match "${search.value.trim()}".` : "No communities in that group."));
+    if (sort !== "creator" && sort !== "group") return box.replaceChildren(h("ul", { class: "list" }, [...practice, ...rest].map(row)));
+    const heads = new Map();
+    if (practice.length) heads.set("Practice", practice);
+    const put = (k, c) => { if (!heads.has(k)) heads.set(k, []); heads.get(k).push(c); };
+    if (sort === "creator") rest.forEach(c => put(c.owner_name || "No creator on record", c));
+    else {
+      // A community in several groups shows under each one
+      const named = [...groups].sort((a, b) => a.name.localeCompare(b.name));
+      named.forEach(g => rest.filter(c => (c.group_ids || []).includes(g.id)).forEach(c => put(g.name, c)));
+      rest.filter(c => !(c.group_ids || []).length).forEach(c => put("No group", c));
+    }
+    box.replaceChildren(...[...heads].flatMap(([k, cs]) => [h("p", { class: "cgroup" }, k), h("ul", { class: "list" }, cs.map(row))]));
   };
-  search.addEventListener("input", draw);
-  sel.addEventListener("change", () => { sort = sel.value; try { localStorage.setItem(CSORT_KEY, sort); } catch { /* fine */ } draw(); });
-  draw();
-  out.push(h("h2", {}, `Everyone else's (${others.length})`), h("div", { class: "cfind" }, search, sel), box);
+  gsel.addEventListener("change", () => { gfilter = gsel.value; drawMine(); drawOthers(); });
+  search.addEventListener("input", drawOthers);
+  sel.addEventListener("change", () => { sort = sel.value; try { localStorage.setItem(CSORT_KEY, sort); } catch { /* fine */ } drawOthers(); });
+  drawMine(); drawOthers();
+
+  const out = [filterBar, h("h2", { style: "margin-top:8px" }, "Yours"), mineBox];
+  if (others.length) out.push(h("h2", {}, `Everyone else's (${others.length})`), h("div", { class: "cfind" }, search, sel), box);
   return out;
+}
+
+// Pick which groups a community is in. Predefined groups: owner and Commissioners. Your groups: you.
+function editCommunityGroups(c, groups) {
+  const canShared = totalAccess(S.me);
+  const have = new Set(c.group_ids || []);
+  const shared = groups.filter(g => !g.owner_id), own = groups.filter(g => g.owner_id === S.me?.id);
+  const boxes = new Map();
+  const item = g => {
+    const cb = h("input", { type: "checkbox", checked: have.has(g.id), disabled: !g.owner_id && !canShared });
+    boxes.set(g.id, cb);
+    return h("label", { class: "gpick" + (cb.disabled ? " off" : "") }, cb, h("span", {}, g.name));
+  };
+  const newName = h("input", { type: "text", class: "ppick", placeholder: "New group name", maxlength: 40, autocomplete: "off" });
+  const close = () => { scrim.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = e => { if (e.key === "Escape") close(); };
+  const save = async b => {
+    b.disabled = true;
+    try {
+      const nm = newName.value.trim();
+      if (nm) {
+        const g = must(await sb.from("community_groups").insert({ name: nm, owner_id: S.me.id }).select("id").single());
+        must(await sb.from("community_group_items").insert({ group_id: g.id, community_id: c.id }));
+      }
+      const add = [], drop = [];
+      for (const [gid, cb] of boxes) { if (cb.disabled) continue; if (cb.checked && !have.has(gid)) add.push(gid); if (!cb.checked && have.has(gid)) drop.push(gid); }
+      if (add.length) must(await sb.from("community_group_items").insert(add.map(group_id => ({ group_id, community_id: c.id }))));
+      if (drop.length) must(await sb.from("community_group_items").delete().eq("community_id", c.id).in("group_id", drop));
+      close(); toast("Groups saved"); route();
+    } catch (e) { b.disabled = false; toast(/duplicate|unique/i.test(e.message) ? "You already have a group with that name." : e.message, true); }
+  };
+  const scrim = h("div", { class: "scrim", onclick: e => { if (e.target === scrim) close(); } },
+    h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": `Groups for ${c.name}` },
+      h("h3", {}, `Groups for ${c.name}`),
+      h("p", {}, "Check every group it belongs in."),
+      h("p", { class: "fine", style: "margin:0 0 6px" }, canShared ? "Game Town Square groups (everyone sees these)" : "Game Town Square groups (set by Commissioners)"),
+      h("div", { class: "glist" }, shared.map(item)),
+      h("p", { class: "fine", style: "margin:12px 0 6px" }, "Your groups (only you see these)"),
+      own.length ? h("div", { class: "glist" }, own.map(item)) : null,
+      newName,
+      h("div", { class: "mbtns" }, btn("Cancel", close), h("button", { class: "btn primary", type: "button", onclick: ev => save(ev.currentTarget) }, "Save groups"))));
+  document.body.append(scrim);
+  document.addEventListener("keydown", onKey);
+}
+
+// Add, rename, delete groups. You edit the Game Town Square groups; everyone edits their own.
+function manageGroups(groups) {
+  const close = () => { scrim.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = e => { if (e.key === "Escape") close(); };
+  const again = async () => { close(); manageGroups(must(await sb.from("community_groups").select("id,name,owner_id").order("name")) || []); route(); };
+  const add = async shared => {
+    const v = await modal({ title: shared ? "New Game Town Square group" : "New group", fields: [{ name: "name", label: "Group name", required: true, maxlength: 40 }], ok: "Add group" });
+    if (!v || !v.name.trim()) return;
+    try { must(await sb.from("community_groups").insert({ name: v.name.trim(), owner_id: shared ? null : S.me.id })); again(); }
+    catch (e) { toast(/duplicate|unique/i.test(e.message) ? "There's already a group with that name." : e.message, true); }
+  };
+  const rename = async g => {
+    const v = await modal({ title: "Rename group", fields: [{ name: "name", label: "Group name", value: g.name, required: true, maxlength: 40 }], ok: "Rename" });
+    if (!v || !v.name.trim()) return;
+    try { must(await sb.from("community_groups").update({ name: v.name.trim() }).eq("id", g.id)); again(); }
+    catch (e) { toast(/duplicate|unique/i.test(e.message) ? "There's already a group with that name." : e.message, true); }
+  };
+  const del = async g => {
+    if (!await confirmBox(`Delete "${g.name}"?`, g.owner_id ? "The group is removed. The communities in it aren't touched."
+      : "Everyone loses this group. The communities in it aren't touched.", "Delete group")) return;
+    try { must(await sb.from("community_groups").delete().eq("id", g.id)); again(); } catch (e) { toast(e.message, true); }
+  };
+  const shared = groups.filter(g => !g.owner_id), own = groups.filter(g => g.owner_id === S.me?.id);
+  const edit = !!S.me?.is_owner;
+  const line = (g, canEdit) => h("li", {}, h("span", {}, g.name),
+    canEdit && h("span", { class: "chips" }, btn("Rename", () => rename(g)), btn("Delete", () => del(g), "danger")));
+  const scrim = h("div", { class: "scrim", onclick: e => { if (e.target === scrim) close(); } },
+    h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": "Groups" },
+      h("h3", {}, "Groups"),
+      h("p", { class: "fine", style: "margin:0 0 6px" }, edit ? "Game Town Square groups. Everyone sees these, and only you can change them." : "Game Town Square groups"),
+      h("ul", { class: "gman" }, shared.length ? shared.map(g => line(g, edit)) : h("li", {}, "None yet.")),
+      edit && h("div", { class: "actions", style: "margin:6px 0 0" }, btn("Add a Game Town Square group", () => add(true))),
+      h("p", { class: "fine", style: "margin:16px 0 6px" }, "Your groups. Only you see these."),
+      h("ul", { class: "gman" }, own.length ? own.map(g => line(g, true)) : h("li", {}, "None yet.")),
+      h("div", { class: "actions", style: "margin:6px 0 0" }, btn("Add a group", () => add(false))),
+      h("div", { class: "mbtns" }, btn("Done", close))));
+  document.body.append(scrim);
+  document.addEventListener("keydown", onKey);
 }
 
 /* ---------- Admin access requests ----------
