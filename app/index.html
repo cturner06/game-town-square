@@ -1012,8 +1012,11 @@ async function viewHome() {
   const all = must(await sb.from("communities").select("id,name,is_practice").order("is_practice", { ascending: false }).order("name"));
   const list = isSuper() || isComm() ? all : all.filter(c => S.admin.has(c.id));
   const mine = poolsShown() ? (must(await sb.rpc("my_pools")) || []) : [];
-  const joined = S.me ? (must(await sb.rpc("my_member_communities")) || []).filter(c => !list.some(x => x.id === c.id)) : [];
-  const isPlayerOnly = !list.length && (mine.length || joined.length);
+  // Communities this person runs, created, starred, pays for, or plays in (saved square, helper, pool, player)
+  const homeRows = S.me ? (must(await sb.rpc("home_communities")) || []) : [];
+  const joined = S.me ? (must(await sb.rpc("my_member_communities")) || [])
+    .filter(c => !list.some(x => x.id === c.id) && !homeRows.some(x => x.id === c.id)) : [];
+  const isPlayerOnly = !list.length && !homeRows.length && (mine.length || joined.length);
   // Admin access requests: the owner sees how many are waiting; everyone else sees their own request
   const reqs = S.me?.is_owner || isComm() ? (must(await sb.rpc("owner_requests")) || []) : [];
   const waiting = reqs.length;
@@ -1049,8 +1052,8 @@ async function viewHome() {
         h("div", {}, h("b", {}, i.note || "No note"), h("div", { class: "meta" }, `Made by ${i.created_by_name}, ${lockTime(i.created_at)}`)),
         h("div", { class: "chips" }, btn("Copy link", () => copy(link("#/start/" + i.code))),
           btn("Cancel", async () => { try { must(await sb.rpc("cancel_creator_invite", { c: i.code })); route(); toast("Invite canceled"); } catch (e) { toast(e.message, true); } }, "danger")))))] : null,
-    isPlayerOnly ? null : list.length
-      ? await homeCommunityLists()
+    isPlayerOnly ? null : (list.length || homeRows.length)
+      ? homeCommunityLists(homeRows)
       : h("p", { class: "empty" }, isSuper()
           ? "Create a community to start adding board sets."
           : "You aren't an admin on any community yet. To start your own, ask a Commissioner for an invite link."),
@@ -1063,10 +1066,12 @@ async function viewHome() {
    Yours on top (you created it, admin it, or starred it), A to Z.
    Everyone else's below, with a search box and a sort that this device remembers. */
 const CSORT_KEY = "gts-csort";
-async function homeCommunityLists() {
-  const rows = must(await sb.rpc("home_communities")) || [];
+function homeCommunityLists(rows) {
   const me = S.me?.id;
-  const isMine = c => c.pinned || c.is_admin || c.owner_id === me;
+  const isMine = c => c.pinned || c.is_admin || c.paying || c.linked || c.owner_id === me;
+  // Why it's in Yours when you don't run it
+  const tie = c => c.owner_id === me || c.is_admin ? "" : c.paying ? "You pay for its plan"
+    : { saved: "You have a saved square here", helper: "You help on a board here", pool: "You're in a pool here", member: "You play here" }[c.linked] || "";
   const az = (a, b) => (b.is_practice - a.is_practice) || a.name.localeCompare(b.name);
   const mine = rows.filter(isMine).sort(az);
   const others = rows.filter(c => !isMine(c));
@@ -1085,7 +1090,7 @@ async function homeCommunityLists() {
   const row = c => h("li", { class: "crow" },
     h("div", {},
       h("a", { href: "#/c/" + c.id }, c.name, c.is_practice && h("span", { class: "ptag" }, "Practice")),
-      h("div", { class: "meta" }, [c.owner_name ? `Created by ${c.owner_name}` : "", ago(c.last_active)].filter(Boolean).join(". "))),
+      h("div", { class: "meta" }, [c.owner_name ? `Created by ${c.owner_name}` : "", tie(c), ago(c.last_active)].filter(Boolean).join(". "))),
     h("div", { class: "chips" },
       iconBtn(c.pinned ? "starOn" : "star", c.pinned ? `Unstar ${c.name}` : `Star ${c.name}`, () => toggleStar(c), "sm star"),
       isSuper() && btn("Rename", () => renameCommunity(c)),
@@ -1094,7 +1099,7 @@ async function homeCommunityLists() {
   const out = [];
   out.push(h("h2", { style: "margin-top:8px" }, "Yours"),
     mine.length ? h("ul", { class: "list" }, mine.map(row))
-      : h("p", { class: "empty" }, "Tap the star on any community below to keep it up here."));
+      : h("p", { class: "empty" }, "Communities you create, run, pay for, or play in show up here. Tap the star on any community below to add it."));
   if (!others.length) return out;
 
   let sort = "active";
