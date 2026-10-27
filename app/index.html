@@ -549,6 +549,10 @@ main.wide{max-width:1400px}
 .plan b,.plan .why,.plan .then{color:inherit}.plan .why,.plan .then{color:var(--muted)}
 .modal select.sport{width:100%;margin:0 0 10px;padding:9px 10px;border-radius:8px;border:1px solid #D6CCBF;font:inherit;background:#fff;color:var(--ink)}
 .fine{font-size:13px;color:var(--muted);margin:6px 0 0}
+.mform label.ack,.ack{display:flex;flex-direction:row;align-items:flex-start;gap:10px;grid-column:span 2;margin:4px 0 2px;padding:10px 12px;border-radius:8px;
+  background:#F6F2EC;color:var(--ink);font-size:14px;font-weight:500;line-height:1.4;cursor:pointer}
+.ack input{width:18px;height:18px;margin:1px 0 0;flex-shrink:0}
+.plans.locked .plan{opacity:.5}
 /* Add admin: searchable list of people */
 .ppick{width:100%;min-height:42px;margin:0 0 8px;padding:9px 10px;border-radius:8px;border:1px solid #D6CCBF;font:inherit;background:#fff;color:var(--ink)}
 .plist{list-style:none;margin:0 0 6px;padding:0;max-height:52vh;overflow:auto;display:grid;gap:4px}
@@ -647,7 +651,7 @@ async function copy(text) {
 function must({ data, error }) { if (error) throw new Error(error.message); return data; }
 
 /* ---------- Modal ---------- */
-function modal({ title, text, fields = [], ok = "Save", okClass = "primary", extra = [], after }) {
+function modal({ title, text, fields = [], ok = "Save", okClass = "primary", extra = [], after, ack }) {
   return new Promise(resolve => {
     const inputs = {};
     const close = val => { scrim.remove(); document.removeEventListener("keydown", onKey); resolve(val); };
@@ -669,6 +673,8 @@ function modal({ title, text, fields = [], ok = "Save", okClass = "primary", ext
       inputs[f.name] = inp;
       form.append(h("label", { class: f.half ? "half" : "" }, h("span", {}, f.label), inp));
     }
+    // Acknowledgement: the box has to be checked before they can continue
+    if (ack) form.append(h("label", { class: "ack" }, h("input", { type: "checkbox", required: true }), h("span", {}, ack)));
     form.append(h("div", { class: "mbtns" },
       btn("Cancel", () => close(null)),
       extra.map(x => btn(x.label, () => close({ __action: x.action }), x.cls || "")),
@@ -685,7 +691,7 @@ function modal({ title, text, fields = [], ok = "Save", okClass = "primary", ext
     if (first && first.select) first.select();
   });
 }
-const confirmBox = (title, text, ok, okClass = "danger") => modal({ title, text, ok, okClass }).then(v => !!v);
+const confirmBox = (title, text, ok, okClass = "danger", ack) => modal({ title, text, ok, okClass, ack }).then(v => !!v);
 
 /* ---------- Auth state ---------- */
 async function loadMe() {
@@ -908,6 +914,7 @@ async function route() {
     if (key === "me") return await viewProfile();
     if (key === "preview") return viewPreview();
     if (key === "billing") return await viewBilling();
+    if (key === "purchases") return await viewPurchases();
     await viewHome();
     if (S.me && (!S.me.first_name || !S.me.last_name) && !S.askedName) { S.askedName = true; editName(true); }
     return;
@@ -1391,7 +1398,11 @@ function planPicker({ cid = null, cname = "", league = "", need = "board", trans
   const sel = pickSport && h("select", { class: "sport", "aria-label": "Sport", onchange: e => { sport = e.target.value; draw(); } },
     h("option", { value: "" }, "Sport for the week, month, or playoffs plan"),
     PLAN_LEAGUES.map(x => h("option", { value: x, selected: x === sport }, x)));
-  const box = h("div", { class: "plans" });
+  const box = h("div", { class: "plans locked" });
+  const ackBox = h("input", { type: "checkbox", onchange: () => box.classList.toggle("locked", !ackBox.checked) });
+  const ackText = transferId
+    ? `I understand I'm taking over ${cname || "this community"} and will pay for its plan from now on. Plans run to the end of the time I've paid for, and there are no refunds.`
+    : "I understand plans run to the end of the time I've paid for, there are no refunds, and Week and Month plans stop on their own when that sport's regular season ends.";
   function draw() {
     const cat = planCatalog(sport);
     box.replaceChildren(...keys.map(k => {
@@ -1399,6 +1410,7 @@ function planPicker({ cid = null, cname = "", league = "", need = "board", trans
       return h("button", { type: "button", class: "plan", onclick: async ev => {
           const b = ev.currentTarget;
           if (SPORT_PLANS.includes(k) && !sport) { toast("Pick a sport first.", true); sel && sel.focus(); return; }
+          if (!ackBox.checked) { toast("Check the box to agree first.", true); ackBox.focus(); return; }
           b.disabled = true;
           if (!await checkout(k, { community_id: cid, league: SPORT_PLANS.includes(k) ? sport : null, transfer_id: transferId })) b.disabled = false;
         } },
@@ -1413,7 +1425,8 @@ function planPicker({ cid = null, cname = "", league = "", need = "board", trans
     : need === "board" ? "Pick how you want to pay for boards here. You'll finish on Stripe's secure checkout." : "");
   const scrim = h("div", { class: "scrim", onclick: e => { if (e.target === scrim) close(); } },
     h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": title },
-      h("h3", {}, title), text && h("p", {}, text), sel, box,
+      h("h3", {}, title), text && h("p", {}, text), sel,
+      h("label", { class: "ack", style: "margin:0 0 10px" }, ackBox, h("span", {}, ackText)), box,
       h("p", { class: "fine" }, "Prices include the service fee. Plans run to the end of the time you've paid for. No refunds."),
       h("div", { class: "mbtns" }, btn("Close", close))));
   document.body.append(scrim);
@@ -1460,7 +1473,9 @@ async function planTab(c) {
     !c.owner_id ? null : pending
       ? h("ul", { class: "list" }, h("li", {},
           h("div", {}, h("b", {}, `Waiting on ${toName}`), h("div", { class: "meta" }, `Sent ${lockTime(pending.created_at)}. It moves once they pick a plan.`)),
-          btn("Cancel hand-off", async () => { try { must(await sb.rpc("cancel_transfer", { tid: pending.id })); route(); toast("Hand-off canceled"); } catch (e) { toast(e.message, true); } }, "danger")))
+          btn("Cancel hand-off", async () => {
+            if (!await confirmBox("Cancel the hand-off?", `${toName} won't be able to take over ${c.name}.`, "Cancel hand-off", "danger", "I understand the community stays with its current creator.")) return;
+            try { must(await sb.rpc("cancel_transfer", { tid: pending.id })); route(); toast("Hand-off canceled"); } catch (e) { toast(e.message, true); } }, "danger")))
       : [h("p", { class: "meta" }, mine
           ? "The new owner has to pick a plan and pay before the community moves to them. Your plan runs to the end of your paid time, with no refund."
           : "The new owner has to pick a plan and pay before the community moves to them. The current creator's plan runs to the end of their paid time, with no refund."),
@@ -1468,7 +1483,10 @@ async function planTab(c) {
 }
 async function handOff(c) {
   const v = await modal({ title: `Hand off ${c.name}`, text: "Enter the login email of the new owner. They need a Game Town Square login first.",
-    fields: [{ name: "email", label: "Their login email", type: "email", required: true, autocomplete: "off" }], ok: "Send hand-off" });
+    fields: [{ name: "email", label: "Their login email", type: "email", required: true, autocomplete: "off" }], ok: "Send hand-off",
+    ack: c.owner_id === S.me?.id
+      ? "I understand the community moves to them once they pay, and my plan for it runs to the end of my paid time with no refund."
+      : "I understand the community moves to them once they pay, and the current creator's plan runs to the end of their paid time with no refund." });
   if (!v) return;
   try { must(await sb.rpc("request_transfer", { cid: c.id, to_email: v.email })); route(); toast("Hand-off sent. They'll see it on their home screen."); }
   catch (e) { toast(e.message, true); }
@@ -1480,21 +1498,25 @@ function transferList(rows) {
       h("div", {}, h("b", {}, t.community_name), h("div", { class: "meta" }, `${t.from_name} wants to hand it to you. Pick a plan to take it over.`)),
       h("div", { class: "chips" },
         btn("Pick a plan", () => planPicker({ cid: t.community_id, cname: t.community_name, need: "board", transferId: t.id }), "primary"),
-        btn("Decline", async () => { try { must(await sb.rpc("cancel_transfer", { tid: t.id })); route(); toast("Declined"); } catch (e) { toast(e.message, true); } }, "danger")))))];
+        btn("Decline", async () => {
+          if (!await confirmBox(`Decline ${t.community_name}?`, `${t.from_name} keeps it.`, "Decline", "danger", "I understand I won't take over this community.")) return;
+          try { must(await sb.rpc("cancel_transfer", { tid: t.id })); route(); toast("Declined"); } catch (e) { toast(e.message, true); } }, "danger")))))];
 }
 
 // Commissioners: one-time link for someone to start their own community
 async function inviteCreator() {
   const v = await modal({ title: "Invite a community creator",
     text: "You get a one-time link. Whoever opens it signs in, names their community, and starts on the free package.",
-    fields: [{ name: "note", label: "Who it's for (only Commissioners see this)", maxlength: 80 }], ok: "Make link" });
+    fields: [{ name: "note", label: "Who it's for (only Commissioners see this)", maxlength: 80 }], ok: "Make link",
+    ack: "I understand anyone who opens this link can start a community. I'll only send it to the person it's for." });
   if (!v) return;
   try { const code = must(await sb.rpc("make_creator_invite", { msg: v.note || "" })); await copy(link("#/start/" + code)); route(); }
   catch (e) { toast(e.message, true); }
 }
 // Unlimited communities: start another one
 async function startCommunity() {
-  const v = await modal({ title: "Start a community", fields: [{ name: "name", label: "Community name", required: true, maxlength: 80 }], ok: "Create community" });
+  const v = await modal({ title: "Start a community", fields: [{ name: "name", label: "Community name", required: true, maxlength: 80 }], ok: "Create community",
+    ack: "I understand I'll be this community's creator and it's covered by my Unlimited Communities plan." });
   if (!v || !v.name.trim()) return;
   try { const cid = must(await sb.rpc("create_my_community", { nm: v.name.trim() })); await loadMe(); go("#/c/" + cid); }
   catch (e) { toast(e.message, true); }
@@ -1516,6 +1538,8 @@ async function viewStart(code) {
     h("p", {}, "Name it. You'll be its creator. It starts on the free package: one board a month for your first 3 months."),
     h("form", { class: "mform", onsubmit: e => { e.preventDefault(); make(); } },
       h("label", {}, h("span", {}, "Community name"), name),
+      h("label", { class: "ack" }, h("input", { type: "checkbox", required: true }),
+        h("span", {}, "I understand I'll be this community's creator. The free package is one board a month for 3 months; after that, I pay for its plan.")),
       h("div", { class: "mbtns" }, h("button", { class: "btn primary", type: "submit" }, "Create community")))));
   name.focus();
 }
@@ -1531,9 +1555,10 @@ async function viewBilling() {
   const [plans, handed, owned] = await Promise.all([
     sb.rpc("my_plans").then(must), sb.rpc("my_pending_transfers").then(must),
     sb.from("communities").select("id,name,comped").eq("owner_id", S.me.id).order("name").then(must)]);
-  const live = (plans || []).filter(p => ["active", "past_due", "pending"].includes(p.status) && !(p.plan === "single_board" && p.board_id));
+  const live = (plans || []).filter(p => !p.refunded_at && ["active", "past_due", "pending"].includes(p.status) && !(p.plan === "single_board" && p.board_id));
   const past = (plans || []).filter(p => !live.includes(p));
   const statusOf = p => {
+    if (p.refunded_at) return `Refunded ${ctDate(p.refunded_at)}`;
     if (p.status === "past_due") return "Payment failed. Update your card in Manage billing.";
     if (p.status === "pending") return "Waiting on payment";
     if (p.plan === "single_board") return p.board_id ? "Used on a board" : "Ready. Add a board to use it.";
@@ -1562,12 +1587,66 @@ async function viewBilling() {
     plans.length ? h("p", { class: "meta" }, "Manage billing opens Stripe, where you can update your card, see receipts, or cancel. Canceled plans run to the end of the time you've paid for.") : null,
     past.length ? [h("h2", {}, "Past plans"), h("ul", { class: "list" }, past.map(row))] : null);
 }
+// #/purchases (owner only): every purchase, with a full refund that ends the plan now
+async function viewPurchases() {
+  if (!S.me?.is_owner) throw new Error("Page not found.");
+  const rows = must(await sb.rpc("all_purchases")) || [];
+  let q = "";
+  const search = h("input", { type: "search", class: "search", placeholder: "Search by buyer, email, community, or plan", "aria-label": "Search purchases", autocomplete: "off" });
+  const box = h("div");
+  const state = p => p.refunded_at ? `Refunded ${ctDate(p.refunded_at)}`
+    : p.status === "past_due" ? "Payment failed"
+    : p.status === "pending" ? "Waiting on payment"
+    : p.status === "canceled" || p.status === "expired" ? "Ended"
+    : p.plan === "single_board" ? (p.board_used ? "Used on a board" : "Not used yet")
+    : p.cancel_at_period_end ? `Active, ends ${ctDate(p.ends_at)}` : p.is_subscription ? "Active, renews" : `Good through ${ctDate(p.ends_at)}`;
+  const canRefund = p => !p.refunded_at && p.status !== "pending";
+  const call = async body => {
+    const { data, error } = await sb.functions.invoke("admin-refund", { body });
+    if (error) { let m = error.message; try { m = (await error.context.json()).error || m; } catch { /* keep */ } throw new Error(m); }
+    return data;
+  };
+  const refund = async p => {
+    const what = PLAN_NAMES[p.plan] || p.plan;
+    let pv;
+    try { toast("Figuring the refund..."); pv = await call({ entitlement_id: p.id, preview: true }); }
+    catch (e) { return toast(e.message, true); }
+    const amt = money((pv?.cents || 0) / 100);
+    if (!await confirmBox(`Refund ${amt} to ${p.buyer_name || "this buyer"}?`,
+      `${pv?.why || ""} They get back ${amt} for ${what}. The service fee isn't refunded. The plan ends now.` +
+      (p.is_subscription ? " The subscription is canceled, so it won't bill again." : ""), pv?.cents ? `Refund ${amt}` : "End plan", "danger",
+      pv?.cents ? `I understand ${amt} goes back to their card, the plan ends now, and this can't be undone.`
+                : "I understand there's nothing left to refund, the plan ends now, and this can't be undone.")) return;
+    try {
+      const data = await call({ entitlement_id: p.id });
+      toast(data?.refunded ? `Refunded ${money(data.refunded / 100)}` : "Plan ended. There was nothing left to refund."); route();
+    } catch (e) { toast(e.message, true); }
+  };
+  const draw = () => {
+    const t = q.toLowerCase();
+    const list = rows.filter(p => !t || [p.buyer_name, p.buyer_email, p.community_name, PLAN_NAMES[p.plan], p.league].some(x => (x || "").toLowerCase().includes(t)));
+    box.replaceChildren(list.length ? h("ul", { class: "list" }, list.map(p => h("li", { class: "crow" },
+      h("div", {}, h("b", {}, `${PLAN_NAMES[p.plan] || p.plan}${p.league ? ", " + p.league : ""}`),
+        h("div", { class: "meta" }, [p.buyer_name, p.buyer_email].filter(Boolean).join(", ")),
+        h("div", { class: "meta" }, [p.community_name || (p.plan === "unlimited_communities" || p.plan === "playoffs" ? "" : "Community deleted"),
+          `Bought ${ctDate(p.created_at)}`, state(p)].filter(Boolean).join(". "))),
+      canRefund(p) && h("div", { class: "chips" }, btn("Refund", () => refund(p), "danger")))))
+      : h("p", { class: "empty" }, rows.length ? "No purchases match that search." : "No purchases yet."));
+  };
+  search.addEventListener("input", () => { q = search.value.trim(); draw(); });
+  draw();
+  render(h("div", { class: "crumbs" }, h("a", { href: "#/" }, "Home")),
+    h("h1", {}, "Purchases"),
+    h("p", { class: "sub" }, "Every plan anyone has bought, newest first. Refund sends back what's left over on the plan (never the service fee) and ends the plan now."),
+    search, box);
+}
 async function togglePaid() {
   const on = !S.paidOn;
   if (!await confirmBox(on ? "Turn on paid plans?" : "Turn off paid plans?",
     on ? "Community creators will need a plan for new boards, pools, and extra communities. Commissioners, you, and free communities are not affected."
        : "Everyone can add boards, pools, and communities without a plan. Billing and existing plans are untouched.",
-    on ? "Turn on" : "Turn off", on ? "primary" : "danger")) return;
+    on ? "Turn on" : "Turn off", on ? "primary" : "danger",
+    on ? "I understand creators without a plan can't add boards, pools, or extra communities once this is on." : "I understand everyone can add boards, pools, and communities for free while this is off.")) return;
   try {
     must(await sb.from("app_settings").update({ value: on, updated_at: new Date().toISOString() }).eq("key", "paid_plans_live"));
     await loadMe(); route(); toast(on ? "Paid plans are on" : "Paid plans are off");
@@ -2330,7 +2409,8 @@ async function setCreator(c) {
   pickPerson({ title: `Set creator of ${c.name}`,
     text: "The creator pays for this community's plan. This takes effect now with no payment step, and they're made an admin if they aren't one.",
     people, onPick: async p => {
-      if (!await confirmBox(`Make ${p.display_name} the creator?`, `${p.display_name} will own ${c.name} and pay for its plan from now on. Any pending hand-off is canceled.`, "Set creator", "primary")) return false;
+      if (!await confirmBox(`Make ${p.display_name} the creator?`, `${p.display_name} will own ${c.name} and pay for its plan from now on. Any pending hand-off is canceled.`, "Set creator", "primary",
+        `I understand ${p.display_name} becomes the creator now, with no payment step.`)) return false;
       try { must(await sb.rpc("set_community_creator", { cid: c.id, uid: p.id })); toast(`${p.display_name} is now the creator`); route(); return true; }
       catch (e) { toast(e.message, true); return false; }
     } });
@@ -2344,7 +2424,8 @@ async function removeAdmin(cid, a) {
 
 async function deleteCommunity(c) {
   const v = await modal({ title: "Delete community?", text: `Every board set and board in "${c.name}" will be deleted. Type the community name to confirm.`,
-    fields: [{ name: "name", label: "Community name" }], ok: "Delete community", okClass: "danger" });
+    fields: [{ name: "name", label: "Community name" }], ok: "Delete community", okClass: "danger",
+    ack: "I understand this can't be undone. Running subscriptions on it aren't canceled by deleting it." });
   if (!v) return;
   if (v.name.trim() !== c.name) return toast("Name didn't match. Nothing was deleted.", true);
   try { must(await sb.from("communities").delete().eq("id", c.id)); go("#/"); }
@@ -2618,6 +2699,7 @@ function boardBlock(b, mg, ctx) {
           { label: "Vote pages", toggle: !!S.votesOn, fn: toggleVotes },
           { label: "Commissioner unlock", toggle: !!S.commUnlock, fn: toggleCommUnlock },
           { label: "Paid plans", toggle: !!S.paidOn, fn: togglePaid },
+          { label: "Purchases", fn: () => go("#/purchases") },
           { label: "What's coming", fn: () => go("#/preview") }] : []),
         mg && !b.locked && "-",
         mg && !b.locked && { label: "Delete board", fn: () => deleteBoard(b), cls: "danger" }
@@ -3324,6 +3406,7 @@ function ownerMenu() {
     { label: "Paid plans", toggle: !!S.paidOn, fn: togglePaid },
     "-",
     { label: "What's coming", fn: () => go("#/preview") },
+    { label: "Purchases", fn: () => go("#/purchases") },
     { label: "People", fn: () => go("#/people") },
     { label: "Help and guides", fn: () => go("#/help") }]);
 }
