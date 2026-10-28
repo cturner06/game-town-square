@@ -644,9 +644,11 @@ function toast(msg, bad = false) {
   document.body.append(t);
   setTimeout(() => t.remove(), 3200);
 }
-async function copy(text) {
-  try { await navigator.clipboard.writeText(text); toast("Link copied"); }
-  catch { window.prompt("Copy this link:", text); }
+// note: a short description pasted in front of the link, so whoever gets it knows what it is
+async function copy(text, note = "") {
+  const full = note ? `${note}\n${text}` : text;
+  try { await navigator.clipboard.writeText(full); toast(note ? "Link copied with a description" : "Link copied"); }
+  catch { window.prompt("Copy this:", full); }
 }
 function must({ data, error }) { if (error) throw new Error(error.message); return data; }
 
@@ -1063,13 +1065,13 @@ async function viewHome() {
     handed.length ? transferList(handed) : null,
     isPlayerOnly ? null : h("h1", {}, "Communities"),
     (isSuper() || isComm()) && h("div", { class: "actions" }, btn("New community", newCommunity, "primary"),
-      btn("Invite a community creator", inviteCreator),
+      btn("Invite", () => inviteMenu()),
       isSuper() && h("a", { class: "btn", href: "#/people" }, waiting ? `People (${waiting})` : "People")),
     canStart && h("div", { class: "actions" }, btn("Start a community", startCommunity, "primary")),
     invites.length ? [h("p", { class: "seclbl", style: "margin-top:4px" }, `Unused creator invites (${invites.length})`),
       h("ul", { class: "list", style: "margin-bottom:18px" }, invites.map(i => h("li", {},
         h("div", {}, h("b", {}, i.note || "No note"), h("div", { class: "meta" }, `Made by ${i.created_by_name}, ${lockTime(i.created_at)}`)),
-        h("div", { class: "chips" }, btn("Copy link", () => copy(link("#/start/" + i.code))),
+        h("div", { class: "chips" }, btn("Copy link", () => copy(link("#/start/" + i.code), CREATOR_NOTE)),
           btn("Cancel", async () => { try { must(await sb.rpc("cancel_creator_invite", { c: i.code })); route(); toast("Invite canceled"); } catch (e) { toast(e.message, true); } }, "danger")))))] : null,
     isPlayerOnly ? null : (list.length || homeRows.length)
       ? await homeCommunityLists(homeRows)
@@ -1503,6 +1505,63 @@ function transferList(rows) {
           try { must(await sb.rpc("cancel_transfer", { tid: t.id })); route(); toast("Declined"); } catch (e) { toast(e.message, true); } }, "danger")))))];
 }
 
+// What gets pasted in front of an invite link
+const playerInviteNote = name => `You're invited to join ${name} on Game Town Square. Tap the link, sign in or create a login, and you can see the boards and save your squares:`;
+const codeNote = (name, code) => `Your Game Town Square code to join ${name} is ${code}. Open https://www.gametownsquare.com/app, sign in, and enter it under Use code on the home screen. It works once.`;
+const CREATOR_NOTE = "You're invited to start your own community on Game Town Square. Tap the link, sign in or create a login, and name your community. It's free to start: one board a month for your first 3 months.";
+
+// One Invite button. From a community: players, a one-time code, or (Commissioners) a new community creator.
+// From home: pick the community first.
+async function inviteMenu(c = null) {
+  const canCreator = totalAccess(S.me);
+  let comms = [];
+  if (!c) {
+    try { comms = (must(await sb.rpc("home_communities")) || []).filter(x => !x.is_practice && (x.is_admin || isSuper() || isComm()))
+      .sort((a, b) => a.name.localeCompare(b.name)); }
+    catch (e) { return toast(e.message, true); }
+  }
+  const close = () => { scrim.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = e => { if (e.key === "Escape") close(); };
+  const sel = !c && comms.length ? h("select", { class: "sport", "aria-label": "Community" }, comms.map(x => h("option", { value: x.id }, x.name))) : null;
+  const pick = () => c || (sel && comms.find(x => x.id === sel.value));
+  const players = async () => {
+    const cc = pick(); if (!cc) return;
+    try {
+      let inv = must(await sb.rpc("community_invite", { cid: cc.id }));
+      if (!inv.active) {
+        if (!await confirmBox("Turn on the invite link?", `The invite link for ${cc.name} is off. Turn it on so people can join with it?`, "Turn on", "primary")) return;
+        must(await sb.from("community_invites").update({ active: true }).eq("community_id", cc.id));
+      }
+      close(); await copy(link("#/i/" + inv.token), playerInviteNote(cc.name));
+    } catch (e) { toast(e.message, true); }
+  };
+  const oneCode = async () => {
+    const cc = pick(); if (!cc) return;
+    try {
+      const code = must(await sb.rpc("make_access_code", { cid: cc.id }));
+      close();
+      const v = await modal({ title: "One-time code", text: `Give them this code for ${cc.name}. They enter it on their home screen under Use code. It works once.`,
+        fields: [{ name: "code", label: "Code", value: code }], ok: "Done", extra: [{ label: "Copy message", action: "copy" }] });
+      if (v?.__action === "copy") copy(codeNote(cc.name, code));
+    } catch (e) { toast(e.message, true); }
+  };
+  const opt = (title, why, fn) => h("button", { type: "button", class: "plan", style: "grid-template-columns:1fr", onclick: fn },
+    h("b", {}, title), h("span", { class: "why" }, why));
+  const forComm = c || comms.length;
+  const scrim = h("div", { class: "scrim", onclick: e => { if (e.target === scrim) close(); } },
+    h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": "Invite" },
+      h("h3", {}, c ? `Invite to ${c.name}` : "Invite"),
+      h("p", {}, "The link is copied with a short description in front of it, so it's ready to paste into a text or email."),
+      sel && h("p", { class: "fine", style: "margin:0 0 6px" }, "Community"), sel,
+      h("div", { class: "plans" },
+        forComm && opt("Players", "A link anyone can use to join and save their squares. Same link every time until you make a new one.", players),
+        forComm && opt("One person, one-time code", "A code that works once. Good for someone joining from another community.", oneCode),
+        canCreator && opt("Someone to start their own community", "A one-time link. They name their own community and become its creator.", () => { close(); inviteCreator(); })),
+      h("div", { class: "mbtns" }, btn("Close", close))));
+  document.body.append(scrim);
+  document.addEventListener("keydown", onKey);
+}
+
 // Commissioners: one-time link for someone to start their own community
 async function inviteCreator() {
   const v = await modal({ title: "Invite a community creator",
@@ -1510,7 +1569,7 @@ async function inviteCreator() {
     fields: [{ name: "note", label: "Who it's for (only Commissioners see this)", maxlength: 80 }], ok: "Make link",
     ack: "I understand anyone who opens this link can start a community. I'll only send it to the person it's for." });
   if (!v) return;
-  try { const code = must(await sb.rpc("make_creator_invite", { msg: v.note || "" })); await copy(link("#/start/" + code)); route(); }
+  try { const code = must(await sb.rpc("make_creator_invite", { msg: v.note || "" })); await copy(link("#/start/" + code), CREATOR_NOTE); route(); }
   catch (e) { toast(e.message, true); }
 }
 // Unlimited communities: start another one
@@ -1979,6 +2038,7 @@ async function viewCommunity(id, tab = "") {
     h("div", { class: "chead" },
       h("h1", { style: "margin:0" }, c.name),
       h("div", { class: "btns" },
+        btn("Invite", () => inviteMenu(c), "primary"),
         iconBtn("edit", "Rename community", () => renameCommunity(c)),
         isSuper() && iconBtn("trash", "Delete community", () => deleteCommunity(c), "bad"),
         tab === "" && iconBtn("plus", "New game week", () => newWeek(id, weeksForForm), "solid"),
@@ -2239,7 +2299,7 @@ async function viewWeek(id) {
     h("h1", {}, w.label),
     h("p", { class: "sub" }, `${w.league}, ${seasonLabel(w.league, w.season)} season` + (range && range.start !== range.end ? `: ${rangeText(range)}` : "") + (mg ? "" : ` (${w.communities?.name || ""})`)),
     h("div", { class: "actions" },
-      btn("Copy week link", () => copy(link("#/w/" + id))),
+      btn("Copy week link", () => copy(link("#/w/" + id), `Squares boards for ${w.league} ${w.label}${w.communities?.name ? " in " + w.communities.name : ""} on Game Town Square:`)),
       mg && btn("Edit week", () => editWeek(w)),
       mg && sets.some(x => x.boards.some(y => !y.locked)) &&
         btn("Lock open boards", () => lockAll(sets.flatMap(x => x.boards.filter(y => !y.locked).map(y => y.id)))),
@@ -2447,7 +2507,7 @@ async function viewSet(id) {
     h("h1", {}, set.name),
     h("p", { class: "sub" }, wk.league ? `${wk.label}, ${wk.league} ${seasonLabel(wk.league, wk.season)}` : ""),
     h("div", { class: "actions" },
-      btn("Copy set link", () => copy(link("#/s/" + id))),
+      btn("Copy set link", () => copy(link("#/s/" + id), `Squares boards for ${set.name}${wk.label ? ", " + wk.label : ""}${set.communities?.name ? " in " + set.communities.name : ""} on Game Town Square:`)),
       mg && btn("Rename set", () => renameSet(set)),
       mg && btn("Move to week", () => moveSet(set)),
       mg && btn("Add board", () => addBoard(set, boards.length), "primary"),
@@ -2462,7 +2522,7 @@ function setMenu(set, wk) {
   return ["-", { heading: set.name },
     { label: "Add board", fn: () => addBoard({ ...set, weeks: wk }, (set.boards || []).length) },
     open.length && { label: "Lock open boards", fn: () => lockAll(open) },
-    { label: "Copy set link", fn: () => copy(link("#/s/" + set.id)) },
+    { label: "Copy set link", fn: () => copy(link("#/s/" + set.id), `Squares boards for ${set.name}${wk?.label ? ", " + wk.label : ""} on Game Town Square:`) },
     { label: "Rename set", fn: () => renameSet({ ...set, weeks: wk }) },
     { label: "Move to week", fn: () => moveSet(set) }];
 }
@@ -2678,7 +2738,7 @@ function boardBlock(b, mg, ctx) {
       iconBtn("menu", "Board menu", () => openDrawer(boardName(b), [
         { label: "Save image", fn: () => saveImage(sheet, b) },
         canShareFiles() && { label: "Share image", fn: () => shareImage(sheet, b) },
-        { label: "Copy link", fn: () => copy(link("#/b/" + b.id)) },
+        { label: "Copy link", fn: () => copy(link("#/b/" + b.id), `Here's the ${boardName(b)} squares board on Game Town Square:`) },
         "-",
         canEdit && { label: "Scores", fn: () => editScores(b, ctx, refresh) },
         !canEdit && canPull(ctx) && b.scores?.state !== "post" && b.scores?.state !== "manual" && !b.scores?.final && { label: "Update score", fn: () => viewerPull(b, refresh) },
@@ -3331,7 +3391,7 @@ async function viewVote(id) {
         h("span", { class: "meta" }, "You can change your picks until voting closes.")),
       mg && [h("h2", { style: "margin:28px 0 8px" }, "Results"),
         h("div", { class: "actions" },
-          btn("Copy vote link", () => copy(link("#/v/" + id))),
+          btn("Copy vote link", () => copy(link("#/v/" + id), `Vote on ${p.label || "this week's games"}${p.communities?.name ? " for " + p.communities.name : ""} on Game Town Square:`)),
           open ? btn("Close voting", async () => { try { must(await sb.from("polls").update({ closed: true }).eq("id", id)); route(); } catch (e) { toast(e.message, true); } })
                : btn("Reopen voting", async () => { try { must(await sb.from("polls").update({ closed: false, closes_at: null }).eq("id", id)); route(); } catch (e) { toast(e.message, true); } }),
           btn("Delete vote", async () => {
@@ -3502,7 +3562,7 @@ async function playersTab(c) {
       h("p", { style: "margin:0 0 8px" }, h("b", {}, "Invite link "), h("span", { class: "chip" + (inv.active ? " open" : "") }, inv.active ? "On" : "Off")),
       h("p", { class: "meta", style: "margin:0 0 10px;word-break:break-all" }, inv.active ? url : "Turned off. Nobody can join with it."),
       h("div", { class: "actions", style: "margin:0" },
-        inv.active && btn("Copy invite link", () => copy(url), "primary"),
+        inv.active && btn("Copy invite link", () => copy(url, playerInviteNote(c.name)), "primary"),
         btn(inv.active ? "Turn off" : "Turn on", save(async () => must(await sb.from("community_invites").update({ active: !inv.active }).eq("community_id", c.id)))),
         btn("New link", save(async () => {
           if (!await confirmBox("Make a new invite link?", "The old link stops working. People who already joined stay.", "New link")) throw new Error("Kept the current link");
@@ -3513,8 +3573,9 @@ async function playersTab(c) {
       btn("Make a code", async () => {
         try {
           const code = must(await sb.rpc("make_access_code", { cid: c.id }));
-          await modal({ title: "One-time code", text: `Give them this code. They enter it on their home screen under Use code. It works once.`,
-            fields: [{ name: "code", label: "Code", value: code }], ok: "Done" });
+          const v = await modal({ title: "One-time code", text: `Give them this code. They enter it on their home screen under Use code. It works once.`,
+            fields: [{ name: "code", label: "Code", value: code }], ok: "Done", extra: [{ label: "Copy message", action: "copy" }] });
+          if (v?.__action === "copy") copy(codeNote(c.name, code));
         } catch (e) { toast(e.message, true); }
       })),
     h("h2", {}, `Players (${members.length})`),
@@ -3827,8 +3888,9 @@ async function loadPoolGames(pool) {
     route(); toast(pool.kind === "bowl" ? `${data?.games || "All"} bowls loaded from ESPN` : "Bracket loaded from ESPN");
   } catch (e) { toast(e.message, true); }
 }
-async function copyPoolInvite(pid) {
-  try { copy(link("#/j/" + must(await sb.rpc("pool_invite_code", { pid })))); }
+async function copyPoolInvite(pid, name = "") {
+  try { copy(link("#/j/" + must(await sb.rpc("pool_invite_code", { pid }))),
+    `You're invited to join ${name ? "the " + name + " pool" : "a pool"} on Game Town Square. Tap the link, sign in or create a login, and make your picks:`); }
   catch (e) { toast(e.message, true); }
 }
 async function deletePoolNow(pool) {
@@ -3966,7 +4028,7 @@ async function viewPool(id) {
   }
   const tbInput = h("input", { type: "number", inputmode: "numeric", min: 0, max: 200, value: tb, "aria-label": `Tiebreaker: total points in the ${titleGame}` });
 
-  const loadBracket = () => loadPoolGames(pool), copyInvite = () => copyPoolInvite(id), deletePool = () => deletePoolNow(pool);
+  const loadBracket = () => loadPoolGames(pool), copyInvite = () => copyPoolInvite(id, pool.name), deletePool = () => deletePoolNow(pool);
 
   // Top 10: ties share a rank until the title game's tiebreaker settles them
   const leaderEl = h("aside", { class: "leader" }, h("h2", {}, "Leaderboard"),
@@ -4001,7 +4063,7 @@ async function viewPool(id) {
     h("p", { class: "sub" }, nfl ? `NFL Playoffs, ${pool.season} season` : `College Football Playoff ${seasonLabel("College Football", pool.season)}`),
     h("div", { class: "pstat " + (st.open ? "open" : "shut") }, st.text),
     h("div", { class: "actions" },
-      btn("Copy pool link", () => copy(link("#/p/" + id))),
+      btn("Copy pool link", () => copy(link("#/p/" + id), `${pool.name} on Game Town Square. See the picks and standings:`)),
       mg && btn("Copy invite link", copyInvite, "primary"),
       mg && !st.locked && btn(pool.loaded_at ? "Reload bracket from ESPN" : "Load bracket from ESPN", loadBracket, pool.loaded_at ? "" : "primary"),
       mg && btn("Rename pool", () => renamePool(pool)),
@@ -4124,8 +4186,8 @@ async function viewBowlPool(pool) {
     h("p", { class: "sub" }, `Bowl pick'em ${seasonLabel("College Football", pool.season)}: 1 point per right pick`),
     h("div", { class: "pstat " + status[0] }, status[1]),
     h("div", { class: "actions" },
-      btn("Copy pool link", () => copy(link("#/p/" + id))),
-      mg && btn("Copy invite link", () => copyPoolInvite(id), "primary"),
+      btn("Copy pool link", () => copy(link("#/p/" + id), `${pool.name} on Game Town Square. See the picks and standings:`)),
+      mg && btn("Copy invite link", () => copyPoolInvite(id, pool.name), "primary"),
       mg && !started && btn(pool.loaded_at ? "Reload bowls from ESPN" : "Load bowls from ESPN", () => loadPoolGames(pool), pool.loaded_at ? "" : "primary"),
       mg && btn("Rename pool", () => renamePool(pool)),
       mg && btn("Delete pool", () => deletePoolNow(pool), "danger")),
