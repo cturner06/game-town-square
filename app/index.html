@@ -512,6 +512,35 @@ main.wide{max-width:1400px}
 .drawer .ditem:hover,.drawer .ditem:focus-visible{background:rgba(0,0,0,.06)}
 .drawer .ditem.primary{background:#F2B61D;color:#1D1D1D}
 .drawer .ditem.danger{color:#B3261E}
+.cgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 0 22px}
+@media (min-width:700px){.cgrid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.cgrid a{display:flex;align-items:center;min-height:48px;padding:10px 12px;border-radius:10px;font-weight:700;text-decoration:none;
+  color:var(--chalk);background:var(--card);box-shadow:var(--card-edge);overflow-wrap:anywhere}
+.cgrid a:hover{background:var(--btn-h)}
+.annc{margin:0 0 22px}
+.annhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px}
+.annlist{list-style:none;margin:0;padding:0}
+.annlist li{border-bottom:1px solid var(--line)}
+.annlink{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:8px 2px;border:0;background:none;font:inherit;font-size:17px;
+  font-weight:700;text-align:left;cursor:pointer;color:var(--chalk);text-decoration:underline;text-underline-offset:3px}
+.annlink:hover{text-decoration-thickness:2px}
+.annlink .chip{display:inline-block;text-decoration:none}
+.modal a.btn{text-decoration:none}
+.menuwrap{position:relative;display:inline-flex}
+.menubadge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#B3261E;color:#fff;
+  font-size:11px;font-weight:700;line-height:18px;text-align:center;pointer-events:none}
+.hot{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.hot button{min-height:40px;padding:8px 14px;border:0;border-radius:999px;font:inherit;font-size:15px;font-weight:700;cursor:pointer;
+  color:var(--chalk);background:var(--btn);box-shadow:var(--btn-edge)}
+.hot button:hover{background:var(--btn-h)}
+.hits{display:flex;flex-direction:column;gap:6px;margin:-8px 0 14px}
+.hits .hit{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-height:48px;padding:10px 12px;border:0;border-radius:8px;
+  font:inherit;text-align:left;cursor:pointer;color:var(--chalk);background:var(--card);box-shadow:var(--card-edge)}
+.hits .hit:hover{background:var(--btn-h)}
+.htopic{scroll-margin-top:calc(16px + env(safe-area-inset-top,0px));border-radius:6px}
+.htopic.hl{animation:hl 1.6s ease-out}
+@keyframes hl{from{background:rgba(242,182,29,.35)}to{background:transparent}}
+@media (prefers-reduced-motion:reduce){.htopic.hl{animation:none;outline:2px solid #F2B61D}}
 .helptop{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin:0 0 4px}
 .helptop a{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:999px;font-size:15px;font-weight:700;
   text-decoration:none;color:var(--chalk);background:var(--btn);box-shadow:var(--btn-edge)}
@@ -886,9 +915,12 @@ function topbar() {
 }
 function render(...nodes) {
   $app.replaceChildren(topbar(), h("main", { class: "wrap" },
-    (location.hash !== "#/help" || S.me?.is_owner) && h("div", { class: "helptop" },
+    (location.hash !== "#/help" || S.me?.is_owner || S.homeMenu) && h("div", { class: "helptop" },
       location.hash !== "#/help" && h("a", { href: "#/help" }, icon("help", 18), "Help"),
-      S.me?.is_owner && iconBtn("menu", "Owner menu", ownerMenu, "solid")),
+      S.homeMenu
+        ? h("span", { class: "menuwrap" }, iconBtn("menu", "Menu", S.homeMenu.fn, "solid"),
+            S.homeMenu.count ? h("span", { class: "menubadge", "aria-label": `${S.homeMenu.count} waiting` }, String(S.homeMenu.count)) : null)
+        : S.me?.is_owner && iconBtn("menu", "Owner menu", ownerMenu, "solid")),
     ...nodes));
   requestAnimationFrame(fitBoards);
 }
@@ -906,6 +938,7 @@ document.fonts?.ready.then(fitBoards);
 /* ---------- Router ---------- */
 async function route() {
   stopWatching();
+  S.homeMenu = null;
   const [key, id, sub] = location.hash.replace(/^#\/?/, "").split("?")[0].split("/");
   try {
     if (!CONFIGURED) return viewSetup();
@@ -925,6 +958,8 @@ async function route() {
     if (key === "preview") return viewPreview();
     if (key === "billing") return await viewBilling();
     if (key === "purchases") return await viewPurchases();
+    if (key === "find") return await viewFind();
+    if (key === "more") return await viewMore();
     await viewHome();
     if (S.me && (!S.me.first_name || !S.me.last_name) && !S.askedName) { S.askedName = true; editName(true); }
     return;
@@ -937,7 +972,7 @@ addEventListener("hashchange", route);
 /* ---------- Help ----------
    Each role sees its own guide plus every guide below it. The owner and Super admins see all of them.
    The same text is in the PDF guides (app/guides/), so the two always match. */
-const GUIDES = [{"id": "player", "title": "Player Guide", "who": "For anyone who plays on a board", "intro": "Game Town Square runs squares boards for games. Boards use points, not money.", "sections": [{"h": "Open a board", "k": "p", "items": ["The person running the board sends you a link. It can open one board, a game day, or a whole week.", "You don't need a login to look at a board."]}, {"h": "Read the board", "k": "list", "items": ["The top team runs across the top. The side team runs down the left side.", "Each square has a number from 1 to 100 in the corner and the owner's name.", "When the board locks, the numbers 0 to 9 are drawn across the top and down the side.", "The right column shows the points paid for each quarter and the final."]}, {"h": "How a square wins", "k": "steps", "items": ["At the end of each quarter, take the last digit of each team's score.", "Find the top team's digit across the top and the side team's digit down the side.", "The square where they meet wins that quarter's points.", "Men's college basketball pays Half and Final only."]}, {"h": "Get a square", "k": "list", "items": ["Ask the person running the board. They put your name in the square.", "Want the same square every week? Ask the admin to save it for you. It fills in on every new board in that league, no login needed.", "The board locks 15 minutes before kickoff. After that, names and numbers can't change.", "Squares nobody took at lock time are marked Plug."]}, {"h": "Scores", "k": "list", "items": ["Scores update on their own from ESPN during the game. A Live tag shows while the game is on.", "If the score looks behind, tap the menu button (three lines) and choose Update score."]}, {"h": "Save or share the board", "k": "steps", "items": ["Tap the menu button (three lines) next to the board.", "Choose Save image, Share image, or Copy link."]}]}, {"id": "helper", "title": "Helper Guide", "who": "For people helping on one board", "intro": "A helper fills in one board for the admin. You can't change any other board.", "sections": [{"h": "Get set up", "k": "steps", "items": ["Create a login on Game Town Square.", "Send the admin the email you used. They add you as a helper on their board.", "Sign in and open the board link they send you."]}, {"h": "Fill in names", "k": "steps", "items": ["Tap a square.", "Type the person's name and tap Save name.", "To clear a square, erase the name and tap Save name."]}, {"h": "Draw numbers", "k": "list", "items": ["Tap a number box across the top or down the side and enter 0 to 9.", "Or leave them blank. Numbers are drawn on their own when the board locks."]}, {"h": "Scores", "k": "list", "items": ["Tap the menu button (three lines) and choose Scores.", "Type each team's score, or choose Pull from ESPN.", "Typing scores turns ESPN off for that board until you pull from ESPN again."]}, {"h": "Lock the board", "k": "list", "items": ["Tap the menu button and choose Lock board. Locking draws any blank numbers.", "If you don't lock it, the board locks itself 15 minutes before kickoff.", "After it locks, nothing can change. Only the Board Master can unlock it, or a Commissioner when the Board Master allows it."]}, {"h": "What helpers can't do", "k": "list", "items": ["Change board details like teams, colors, or points.", "Move or delete the board.", "Touch any other board."]}]}, {"id": "admin", "title": "Community Admin Guide", "who": "For people who run a community", "intro": "Community admins set up the weeks, game days, and boards for their community.", "sections": [{"h": "Get access", "k": "steps", "items": ["Create a login on Game Town Square.", "On the home screen, tap Request admin access.", "Pick the community and add a note about who you are.", "A Commissioner approves it. The next time you open the app, a message shows what you can now do."]}, {"h": "How it's organized", "k": "p", "items": ["Community, then game week, then game day, then board.", "A game day holds the boards for one date, like Saturday Oct 10th."]}, {"h": "Create a game week", "k": "steps", "items": ["Open your community and tap the + button.", "Pick the league and season.", "College Football and NFL: pick the week from the list. The weeks match ESPN, and the week page shows its dates.", "Basketball, baseball, hockey, and soccer: pick the game date instead."]}, {"h": "Create a game day", "k": "steps", "items": ["Open the week and tap New board set.", "Pick the game day. Only dates inside that week are allowed. The name fills in, like Saturday Oct 10th.", "You can change the name if you want."]}, {"h": "Add a board", "k": "steps", "items": ["On the week page, tap Add board under the game day. On a board, you can also use the menu button and choose Add board.", "Enter the sport, the top team, the side team, and their colors.", "Enter the kickoff line, points per square, the points for each quarter and the final, and the bottom note."]}, {"h": "Fill names and numbers", "k": "list", "items": ["Tap a square to enter or clear a name.", "Tap a number box to enter a drawn number, 0 to 9.", "You can add helpers to fill in a board for you: menu button, then Helpers, then Add helper. They need a login first."]}, {"h": "Save a square for someone", "k": "steps", "items": ["Open the community and go to the Players tab.", "Under Saved squares, tap Add saved square.", "Pick the league, enter the square number (1 to 100), and the name that shows in it.", "Tap Save square. They don't need a login. Their name fills in on every new board in that league."]}, {"h": "Saved squares: good to know", "k": "list", "items": ["Only new boards fill in. Boards already made don't change.", "Nobody else can pick a saved square, even if the person has no login.", "If they make a login later, pick their name in the box next to the square. Then they manage it from My profile.", "Each league allows up to 30 saved squares per board. Admins and higher can tap Change limit.", "To stop saving a square, tap Remove next to it."]}, {"h": "Locking", "k": "list", "items": ["When the game is found on ESPN, its kickoff time is saved. The board locks itself 15 minutes before kickoff.", "At lock, blank numbers are drawn and empty squares are marked Plug.", "To lock early: menu button, then Lock board. Lock open boards locks every open board in that game day or week.", "Locked boards can't be edited or deleted. Only the Board Master can unlock, or a Commissioner when the Board Master allows it."]}, {"h": "Scores", "k": "list", "items": ["Scores pull from ESPN on their own when the team names match ESPN.", "To type scores, use the menu button and choose Scores."]}, {"h": "The board menu", "k": "list", "items": ["Save image, Share image, Copy link.", "Scores, Edit details, Lock board, Move board, Move up and Move down, Helpers.", "The game day's buttons: Add board, Lock open boards, Copy set link, Rename set, Move to week.", "Delete board, at the bottom. Open boards only."]}, {"h": "Share with players", "k": "list", "items": ["Copy week link sends the whole week.", "Copy set link sends one game day.", "Copy link in a board's menu sends one board."]}]}, {"id": "commissioner", "title": "Commissioner Guide", "who": "For Commissioners", "intro": "Commissioners run every community and approve new admins. Everything in the Community Admin Guide applies to you too.", "sections": [{"h": "What you can do", "k": "list", "items": ["Run weeks, game days, and boards in every community.", "Approve or deny admin requests.", "Create new communities.", "Add and remove community admins.", "Change names, numbers, and details on locked boards. The board stays locked.", "Unlock boards when the Board Master turns that on.", "Free Total Access: every plan and add-on is included, like unlimited communities and Playoffs (playoff bracket and bowl pick'em), plus anything added later."]}, {"h": "Approve admin requests", "k": "steps", "items": ["When someone asks to join a community, Admin requests shows at the top of your home screen.", "Each request shows who's asking, which community, and their note.", "Tap Approve or Deny. Approved admins get a message the next time they open the app."]}, {"h": "Create a community", "k": "steps", "items": ["On the home screen, tap New community.", "Enter the name. You're added as its admin."]}, {"h": "Manage admins", "k": "steps", "items": ["Open the community and go to the Admins tab.", "Tap Add admin and enter their login email. They need a login first.", "Tap Remove to take someone off. You can't remove other Commissioners."]}, {"h": "Fix a locked board", "k": "list", "items": ["Open the board. Tap a square or number box to fix it, the same as an open board.", "To change teams, colors, or points, tap the menu button and choose Edit details.", "The board stays locked the whole time. Players can't change anything."]}, {"h": "Unlock a board", "k": "list", "items": ["This only works after the Board Master turns on Commissioner unlock.", "Open the board, tap the menu button, and choose Unlock. You'll enter your password again.", "The board shows that you unlocked it."]}, {"h": "What you can't do", "k": "list", "items": ["Delete communities.", "Delete locked boards.", "Remove other Commissioners."]}]}];
+const GUIDES = [{"id": "player", "title": "Player Guide", "who": "For anyone who plays on a board", "intro": "Game Town Square runs squares boards for games. Boards use points, not money.", "sections": [{"h": "Get a membership", "k": "steps", "items": ["Get an invite link or a one-time code from the community's admin.", "Invite link: open it, then create a login or sign in. You're added to the community and taken to set up your squares.", "One-time code: sign in, tap the menu button (three lines) on the home screen, choose Use an access code, and enter it. It works once.", "No link or code? Sign in and type in the Find a community box at the top of the home screen. Tap Ask to join. The admins have 7 days to answer, and you'll see their answer on your home screen.", "Membership is free. It lets you see the community's boards and save your squares."]}, {"h": "Open a board", "k": "p", "items": ["The person running the board sends you a link. It can open one board, a game day, or a whole week.", "You don't need a login to look at a board."]}, {"h": "Read the board", "k": "list", "items": ["The top team runs across the top. The side team runs down the left side.", "Each square has a number from 1 to 100 in the corner and the owner's name.", "When the board locks, the numbers 0 to 9 are drawn across the top and down the side.", "The right column shows the points paid for each quarter and the final."]}, {"h": "How a square wins", "k": "steps", "items": ["At the end of each quarter, take the last digit of each team's score.", "Find the top team's digit across the top and the side team's digit down the side.", "The square where they meet wins that quarter's points.", "Men's college basketball pays Half and Final only."]}, {"h": "Get a square", "k": "list", "items": ["Ask the person running the board. They put your name in the square.", "Want the same square every week? Ask the admin to save it for you. It fills in on every new board in that league, no login needed.", "The board locks 15 minutes before kickoff. After that, names and numbers can't change.", "Squares nobody took at lock time are marked Plug."]}, {"h": "Scores", "k": "list", "items": ["Scores update on their own from ESPN during the game. A Live tag shows while the game is on.", "If the score looks behind, tap the menu button (three lines) and choose Update score."]}, {"h": "Save or share the board", "k": "steps", "items": ["Tap the menu button (three lines) next to the board.", "Choose Save image, Share image, or Copy link."]}]}, {"id": "helper", "title": "Helper Guide", "who": "For people helping on one board", "intro": "A helper fills in one board for the admin. You can't change any other board.", "sections": [{"h": "Get set up", "k": "steps", "items": ["Create a login on Game Town Square.", "Send the admin the email you used. They add you as a helper on their board.", "Sign in and open the board link they send you."]}, {"h": "Fill in names", "k": "steps", "items": ["Tap a square.", "Type the person's name and tap Save name.", "To clear a square, erase the name and tap Save name."]}, {"h": "Draw numbers", "k": "list", "items": ["Tap a number box across the top or down the side and enter 0 to 9.", "Or leave them blank. Numbers are drawn on their own when the board locks."]}, {"h": "Scores", "k": "list", "items": ["Tap the menu button (three lines) and choose Scores.", "Type each team's score, or choose Pull from ESPN.", "Typing scores turns ESPN off for that board until you pull from ESPN again."]}, {"h": "Lock the board", "k": "list", "items": ["Tap the menu button and choose Lock board. Locking draws any blank numbers.", "If you don't lock it, the board locks itself 15 minutes before kickoff.", "After it locks, nothing can change. Only the Board Master can unlock it, or a Commissioner when the Board Master allows it."]}, {"h": "What helpers can't do", "k": "list", "items": ["Change board details like teams, colors, or points.", "Move or delete the board.", "Touch any other board."]}]}, {"id": "admin", "title": "Community Admin Guide", "who": "For people who run a community", "intro": "Community admins set up the weeks, game days, and boards for their community.", "sections": [{"h": "Get access", "k": "steps", "items": ["Create a login on Game Town Square.", "On the home screen, tap the menu button (three lines) and choose Request admin access.", "Pick the community and add a note about who you are.", "A Commissioner approves it. The next time you open the app, a message shows what you can now do."]}, {"h": "How it's organized", "k": "p", "items": ["Community, then game week, then game day, then board.", "A game day holds the boards for one date, like Saturday Oct 10th."]}, {"h": "Create a game week", "k": "steps", "items": ["Open your community and tap the + button.", "Pick the league and season.", "College Football and NFL: pick the week from the list. The weeks match ESPN, and the week page shows its dates.", "Basketball, baseball, hockey, and soccer: pick the game date instead."]}, {"h": "Create a game day", "k": "steps", "items": ["Open the week and tap New board set.", "Pick the game day. Only dates inside that week are allowed. The name fills in, like Saturday Oct 10th.", "You can change the name if you want."]}, {"h": "Add a board", "k": "steps", "items": ["On the week page, tap Add board under the game day. On a board, you can also use the menu button and choose Add board.", "Enter the sport, the top team, the side team, and their colors.", "Enter the kickoff line, points per square, the points for each quarter and the final, and the bottom note."]}, {"h": "Fill names and numbers", "k": "list", "items": ["Tap a square to enter or clear a name.", "Tap a number box to enter a drawn number, 0 to 9.", "You can add helpers to fill in a board for you: menu button, then Helpers, then Add helper. They need a login first."]}, {"h": "Join requests", "k": "list", "items": ["When someone asks to join your community, the menu button on your home screen shows a red count. Open it and choose Join requests, or check the Players tab.", "Each request shows their name, their note, and when it runs out.", "Tap Approve or Deny. Any one admin's answer settles it for everyone.", "Requests run out after 7 days with no answer. They can ask again."]}, {"h": "Save a square for someone", "k": "steps", "items": ["Open the community and go to the Players tab.", "Under Saved squares, tap Add saved square.", "Pick the league, enter the square number (1 to 100), and the name that shows in it.", "Tap Save square. They don't need a login. Their name fills in on every new board in that league."]}, {"h": "Saved squares: good to know", "k": "list", "items": ["Only new boards fill in. Boards already made don't change.", "Nobody else can pick a saved square, even if the person has no login.", "If they make a login later, pick their name in the box next to the square. Then they manage it from My profile.", "Each league allows up to 30 saved squares per board. Admins and higher can tap Change limit.", "To stop saving a square, tap Remove next to it."]}, {"h": "Locking", "k": "list", "items": ["When the game is found on ESPN, its kickoff time is saved. The board locks itself 15 minutes before kickoff.", "At lock, blank numbers are drawn and empty squares are marked Plug.", "To lock early: menu button, then Lock board. Lock open boards locks every open board in that game day or week.", "Locked boards can't be edited or deleted. Only the Board Master can unlock, or a Commissioner when the Board Master allows it."]}, {"h": "Scores", "k": "list", "items": ["Scores pull from ESPN on their own when the team names match ESPN.", "To type scores, use the menu button and choose Scores."]}, {"h": "The board menu", "k": "list", "items": ["Save image, Share image, Copy link.", "Scores, Edit details, Lock board, Move board, Move up and Move down, Helpers.", "The game day's buttons: Add board, Lock open boards, Copy set link, Rename set, Move to week.", "Delete board, at the bottom. Open boards only."]}, {"h": "Share with players", "k": "list", "items": ["Copy week link sends the whole week.", "Copy set link sends one game day.", "Copy link in a board's menu sends one board."]}, {"h": "Start your own community", "k": "steps", "items": ["Ask a Commissioner for a creator invite link. It works once.", "Open it, then create a login or sign in.", "Name your community and tap Create community. You're its creator.", "It starts on the free package: one board a month for your first 3 months."]}, {"h": "Plans and prices", "k": "list", "items": ["Single board: $5.50, paid once. One board in one community.", "Unlimited week: $10.75 a week. Unlimited boards for one sport in one community.", "Unlimited month: $31.50, billed on the 1st. Unlimited boards for one sport in one community. Start after the 15th and the first month is half price.", "Unlimited communities: $52.25, billed on the 1st. Every sport in every community you create, and you can start new ones without an invite. Half price the first month if you start after the 15th.", "Playoffs pass: $26.25 per sport, paid once. Playoff bracket and bowl pick'em.", "Week and month plans stop on their own when that sport's regular season ends. Prices include the service fee."]}, {"h": "Pick a plan", "k": "steps", "items": ["Open your community and go to the Plan tab. Only the community's creator can pay for it.", "Tap Pick a plan, or Get a Playoffs pass.", "Pick the sport if the plan asks for one, check the box to agree, and tap the plan.", "Finish on Stripe's secure checkout. You come back to Plans and billing when it's done."]}, {"h": "Manage billing", "k": "list", "items": ["Tap your name in the top right corner and choose Plans and billing.", "Tap Manage billing to update your card, see receipts, or cancel.", "Canceled plans run to the end of the time you've paid for. There are no refunds.", "If a payment fails, update your card in Manage billing. If the plan lapses, the community goes read-only until it's paid."]}, {"h": "Hand off a community", "k": "steps", "items": ["On the Plan tab, tap Hand off and enter the new owner's login email. They need a login first.", "They pick a plan and pay. The community moves to them once checkout is done.", "Your plan for it runs to the end of your paid time, with no refund."]}]}, {"id": "commissioner", "title": "Commissioner Guide", "who": "For Commissioners", "intro": "Commissioners run every community and approve new admins. Everything in the Community Admin Guide applies to you too.", "sections": [{"h": "What you can do", "k": "list", "items": ["Run weeks, game days, and boards in every community.", "Approve or deny admin requests.", "Create new communities.", "Add and remove community admins.", "Change names, numbers, and details on locked boards. The board stays locked.", "Unlock boards when the Board Master turns that on.", "Free Total Access: every plan and add-on is included, like unlimited communities and Playoffs (playoff bracket and bowl pick'em), plus anything added later."]}, {"h": "Approve admin requests", "k": "steps", "items": ["When someone asks to run a community, the menu button on your home screen shows a red count. Open it and choose Admin requests.", "Each request shows who's asking, which community, and their note.", "Tap Approve or Deny. Approved admins get a message the next time they open the app."]}, {"h": "Create a community", "k": "steps", "items": ["On the home screen, tap the menu button and choose New community.", "Enter the name. You're added as its admin."]}, {"h": "Manage admins", "k": "steps", "items": ["Open the community and go to the Admins tab.", "Tap Add admin and enter their login email. They need a login first.", "Tap Remove to take someone off. You can't remove other Commissioners."]}, {"h": "Fix a locked board", "k": "list", "items": ["Open the board. Tap a square or number box to fix it, the same as an open board.", "To change teams, colors, or points, tap the menu button and choose Edit details.", "The board stays locked the whole time. Players can't change anything."]}, {"h": "Unlock a board", "k": "list", "items": ["This only works after the Board Master turns on Commissioner unlock.", "Open the board, tap the menu button, and choose Unlock. You'll enter your password again.", "The board shows that you unlocked it."]}, {"h": "What you can't do", "k": "list", "items": ["Delete communities.", "Delete locked boards.", "Remove other Commissioners."]}]}];
 function guidesForMe() {
   if (S.me?.is_owner || isSuper()) return GUIDES;
   const ids = ["player"];
@@ -946,21 +981,78 @@ function guidesForMe() {
   if (isComm()) ids.push("commissioner");
   return GUIDES.filter(g => ids.includes(g.id));
 }
-function viewHelp() {
+// Hot topics: the most looked-up help sections (last 30 days), 4 to 6 at a time.
+// These fill the row until enough people have looked things up. Ids are guide:section-heading.
+const HOT_SEEDS = ["player:get-a-membership", "admin:pick-a-plan", "player:get-a-square", "player:how-a-square-wins",
+  "admin:save-a-square-for-someone", "admin:add-a-board", "admin:plans-and-prices", "player:read-the-board"];
+const slugOf = t => t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const topicId = (g, x) => `${g.id}:${slugOf(x.h)}`;
+const topicDom = id => "t-" + id.replace(":", "--");
+
+async function viewHelp() {
   const list = guidesForMe().slice().reverse();   // their own role first
+  const topics = list.flatMap(g => g.sections.map(x => ({ id: topicId(g, x), g, x,
+    text: [x.h, ...x.items, g.title].join(" ").toLowerCase() })));
+  const byId = new Map(topics.map(t => [t.id, t]));
+
+  const openTopic = id => {
+    const t = byId.get(id); if (!t) return;
+    if (pick.value !== t.g.id) { pick.value = t.g.id; showGuide(); }
+    const el = document.getElementById(topicDom(id));
+    if (el) {
+      el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+      el.classList.remove("hl"); void el.offsetWidth; el.classList.add("hl");
+    }
+    sb.rpc("log_help_view", { t: id }).then(() => {}, () => {});
+  };
+
+  // Hot topics: popular first, then the starting set, never fewer than 4 or more than 6
+  let popular = [];
+  try { popular = (must(await sb.rpc("hot_help_topics")) || []).map(r => r.topic).filter(id => byId.has(id)); } catch { /* starting set only */ }
+  const n = Math.min(6, Math.max(4, popular.length));
+  const hot = popular.slice(0, 6);
+  for (const id of [...HOT_SEEDS, ...topics.map(t => t.id)]) {
+    if (hot.length >= n) break;
+    if (byId.has(id) && !hot.includes(id)) hot.push(id);
+  }
+
+  const results = h("div", { class: "hits" });
+  const search = h("input", { type: "search", class: "search", placeholder: "Search help", "aria-label": "Search help", autocomplete: "off" });
+  const find = () => {
+    const words = search.value.toLowerCase().split(/\s+/).filter(Boolean);
+    const found = words.length ? topics.filter(t => words.every(w => t.text.includes(w))).slice(0, 8) : [];
+    results.replaceChildren(...(!words.length ? [] : found.length
+      ? found.map(t => h("button", { type: "button", class: "hit", onclick: () => openTopic(t.id) },
+          h("b", {}, t.x.h), h("span", { class: "meta" }, t.g.title)))
+      : [h("p", { class: "empty", style: "margin:0 0 12px" }, "Nothing matches that. Try fewer words.")]));
+  };
+  search.addEventListener("input", find);
+  search.addEventListener("keydown", e => { if (e.key === "Enter") { const f = results.querySelector(".hit"); if (f) f.click(); } });
+
   const body = g => [
     h("p", { class: "sub", style: "margin:4px 0 10px" }, g.intro),
-    g.sections.map(x => [h("h3", { style: "margin:16px 0 6px" }, x.h),
+    g.sections.map(x => [h("h3", { id: topicDom(topicId(g, x)), class: "htopic", style: "margin:16px 0 6px" }, x.h),
       x.k === "p" ? x.items.map(t => h("p", { style: "margin:0 0 8px" }, t))
         : h(x.k === "steps" ? "ol" : "ul", { style: "margin:0;padding-left:22px;line-height:1.5" }, x.items.map(t => h("li", {}, t)))]),
     h("div", { class: "actions", style: "margin-top:16px" },
       h("a", { class: "btn", href: `guides/game-town-square-${g.id}-guide.pdf`, download: "" }, "Download PDF"))];
+  // One guide at a time, picked from the dropdown. Search and Hot topics cover every guide they can see.
+  const guideBox = h("div");
+  const pick = h("select", { class: "search", "aria-label": "Pick a guide", onchange: () => showGuide() },
+    h("option", { value: "" }, "Pick a guide"),
+    list.map(g => h("option", { value: g.id }, `${g.title} · ${g.who}`)));
+  const showGuide = () => {
+    const g = list.find(x => x.id === pick.value);
+    guideBox.replaceChildren(...(g ? [h("div", { class: "panel", style: "margin:0 0 12px" },
+      h("h2", { style: "margin:0" }, g.title), body(g))] : []));
+  };
   render(
     h("h1", {}, "Help"),
-    list.length > 1 && h("p", { class: "sub" }, S.me?.is_owner ? "Every guide, so you can send each person theirs." : "Your guide is first. Tap a guide to open it."),
-    list.map((g, i) => h("details", { class: "panel", style: "margin:0 0 12px", open: i === 0 },
-      h("summary", { style: "cursor:pointer;font-weight:700;font-size:18px" }, g.title, h("span", { class: "meta", style: "font-weight:400" }, ` · ${g.who}`)),
-      body(g)))
+    search, results,
+    h("p", { class: "seclbl", style: "margin:0 0 6px" }, "Hot topics"),
+    h("div", { class: "hot" }, hot.map(id => h("button", { type: "button", onclick: () => openTopic(id) }, byId.get(id).x.h))),
+    h("p", { class: "seclbl", style: "margin:0 0 6px" }, S.me?.is_owner ? "Guides (all of them, so you can send each person theirs)" : "Guides"),
+    pick, guideBox
   );
 }
 
@@ -1036,7 +1128,7 @@ async function editName(required = false, who = S.me) {
 
 async function signOut() { await sb.auth.signOut(); await loadMe(); go("#/login"); }
 
-async function viewHome() {
+async function viewMore() {
   // Practice Field first, then the rest A to Z
   const all = must(await sb.from("communities").select("id,name,is_practice").order("is_practice", { ascending: false }).order("name"));
   const list = isSuper() || isComm() ? all : all.filter(c => S.admin.has(c.id));
@@ -1053,18 +1145,24 @@ async function viewHome() {
     .eq("user_id", S.me.id).order("created_at", { ascending: false }).limit(1).maybeSingle()) : null;
   const invites = totalAccess(S.me) ? (must(await sb.rpc("open_creator_invites")) || []) : [];
   const handed = S.me ? (must(await sb.rpc("my_pending_transfers")) || []) : [];
+  const myJoins = S.me ? (must(await sb.rpc("my_membership_requests")) || []) : [];
+  const joinReqs = S.me ? (must(await sb.rpc("community_join_requests", { cid: null })) || []) : [];
   const canStart = S.me && !totalAccess(S.me) && !!must(await sb.rpc("billing_community_access"))?.allowed;
   const codeBox = h("input", { type: "text", class: "search", placeholder: "Access code", autocomplete: "off", maxlength: 12, style: "max-width:200px;margin:0" });
   render(
+    h("div", { class: "crumbs" }, h("a", { href: "#/" }, "Home")),
+    joinReqs.length ? [h("h1", {}, `Join requests (${joinReqs.length})`), joinReqList(joinReqs, true)] : null,
     joined.length ? [h("h1", {}, "My communities"),
       h("ul", { class: "list" }, joined.map(c => h("li", {}, h("a", { href: "#/c/" + c.id }, c.name))))] : null,
     S.me && h("div", { class: "actions", style: "align-items:center" },
       h("a", { class: "btn", href: "#/me" }, "My profile and squares"),
+      h("a", { class: "btn", href: "#/find" }, "Find a community"),
       codeBox, btn("Use code", async () => {
         const c = codeBox.value.trim(); if (!c) return toast("Type the code you were given.", true);
         try { const r = must(await sb.rpc("redeem_code", { c })); await loadMe(); toast("You're in"); go(r.pool_id ? "#/p/" + r.pool_id : "#/c/" + r.community_id); }
         catch (e) { toast(e.message, true); }
       })),
+    joinWaiting(myJoins),
     mine.length ? [h("h1", {}, "My pools"),
       h("ul", { class: "list" }, mine.map(p => h("li", {},
         h("div", {}, h("a", { href: "#/p/" + p.pool_id }, p.name),
@@ -3522,6 +3620,213 @@ const avatarEl = (url, name, cls = "") => url
   ? h("img", { class: "avimg " + cls, src: url, alt: "", crossorigin: "anonymous", loading: "lazy" })
   : h("span", { class: "avtxt " + cls }, String(name || "?").split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(x => x[0].toUpperCase()).join(""));
 
+/* ---------- Home (first page after sign in) ----------
+   Search for a community, then announcements, then the communities this person is in (2 across on
+   phones, 4 on wider screens, filling each row before starting the next). Everything else that used
+   to be on the home screen is in the menu, with a count of what's waiting. */
+async function viewHome() {
+  if (!S.me) return viewMore();
+  const [homeRows, joined, myJoins, joinReqs, ann, adminReqs, handed, all, canStart] = await Promise.all([
+    sb.rpc("home_communities").then(must), sb.rpc("my_member_communities").then(must),
+    sb.rpc("my_membership_requests").then(must), sb.rpc("community_join_requests", { cid: null }).then(must),
+    sb.rpc("my_announcements").then(must),
+    S.me.is_owner || isComm() ? sb.rpc("owner_requests").then(must) : Promise.resolve([]),
+    sb.rpc("my_pending_transfers").then(must),
+    sb.from("communities").select("id,name,is_practice").order("name").then(must),
+    totalAccess(S.me) ? Promise.resolve(false) : sb.rpc("billing_community_access").then(r => !!must(r)?.allowed)]);
+  const me = S.me.id;
+  const inIt = c => !c.is_practice && (c.pinned || c.is_admin || c.paying || c.linked || c.owner_id === me);
+  const seen = new Set(), comms = [];
+  for (const c of [...(homeRows || []).filter(inIt), ...(joined || [])]) if (!seen.has(c.id)) { seen.add(c.id); comms.push(c); }
+  comms.sort((a, b) => a.name.localeCompare(b.name));
+
+  const nJoin = (joinReqs || []).length, nAdmin = (adminReqs || []).length, nHand = (handed || []).length;
+  const more = n => n ? ` (${n})` : "";
+  S.homeMenu = { count: nJoin + nAdmin + nHand, fn: () => openDrawer("Menu", [
+    (nJoin || nAdmin || nHand) && { heading: "Waiting on you" },
+    nJoin && { label: `Join requests${more(nJoin)}`, fn: () => go("#/more") },
+    nAdmin && { label: `Admin requests${more(nAdmin)}`, fn: () => go("#/more") },
+    nHand && { label: `Hand-offs${more(nHand)}`, fn: () => go("#/more") },
+    "-",
+    { label: "My profile and squares", fn: () => go("#/me") },
+    { label: "Use an access code", fn: useCode },
+    poolsShown() && { label: "My pools", fn: () => go("#/more") },
+    { label: "Community lists", fn: () => go("#/more") },
+    (isSuper() || isComm()) && { label: "New community", fn: newCommunity },
+    (isSuper() || isComm()) && { label: "Invite", fn: () => inviteMenu() },
+    canStart && { label: "Start a community", fn: startCommunity },
+    !isSuper() && !isComm() && { label: "Request admin access", fn: () => requestAccess(all || []) },
+    isSuper() && { label: "People", fn: () => go("#/people") },
+    S.me.is_owner && "-",
+    S.me.is_owner && { label: "Owner controls", fn: ownerMenu }]) };
+
+  // Search: results show under the box once something is typed
+  const box = h("input", { type: "search", class: "search", placeholder: "Find a community", "aria-label": "Find a community", autocomplete: "off" });
+  const hits = h("div");
+  let t = 0;
+  const find = async () => {
+    const q = box.value.trim();
+    if (!q) return hits.replaceChildren();
+    try {
+      const rows = must(await sb.rpc("find_communities", { q })) || [];
+      if (box.value.trim() !== q) return;
+      hits.replaceChildren(rows.length
+        ? h("ul", { class: "list", style: "margin-bottom:18px" }, rows.map(c => h("li", {},
+            h("div", {}, h("b", {}, c.name), h("div", { class: "meta" }, c.creator ? `Started by ${c.creator}` : "")),
+            c.requested ? h("span", { class: "chip" }, "Asked") : btn("Ask to join", () => askToJoin(c), "primary"))))
+        : h("p", { class: "empty", style: "margin:0 0 18px" }, "No communities to join match that."));
+    } catch (e) { hits.replaceChildren(h("p", { class: "err" }, e.message)); }
+  };
+  box.addEventListener("input", () => { clearTimeout(t); t = setTimeout(find, 250); });
+
+  render(
+    joinAnswers(myJoins || []),
+    box, hits,
+    announceBlock(ann || []),
+    h("h2", {}, "My communities"),
+    comms.length
+      ? h("div", { class: "cgrid" }, comms.map(c => h("a", { href: "#/c/" + c.id }, c.name)))
+      : h("p", { class: "empty" }, "You're not in a community yet. Search above to find one, or use the access code you were given (menu, then Use an access code)."),
+    joinWaiting(myJoins || []));
+  if (S.me && (!S.me.first_name || !S.me.last_name) && !S.askedName) { S.askedName = true; editName(true); }
+}
+async function useCode() {
+  const v = await modal({ title: "Use an access code", text: "Enter the one-time code an admin gave you.",
+    fields: [{ name: "code", label: "Access code", maxlength: 12, required: true }], ok: "Use code" });
+  if (!v || !v.code.trim()) return;
+  try { const r = must(await sb.rpc("redeem_code", { c: v.code.trim() })); await loadMe(); toast("You're in"); go(r.pool_id ? "#/p/" + r.pool_id : "#/c/" + r.community_id); }
+  catch (e) { toast(e.message, true); }
+}
+
+/* ---------- Announcements ----------
+   The Board Master and Commissioners post. New pools post themselves to that community's people.
+   Posts drop off after 14 days unless pinned. Anyone can hide one for themselves with the X;
+   only the Board Master can edit, pin, or delete. */
+function announceBlock(rows) {
+  const canPost = S.me?.is_owner || isComm();
+  if (!rows.length && !canPost) return null;
+  return h("section", { class: "annc" },
+    h("div", { class: "annhead" }, h("h2", { style: "margin:0" }, "Announcements"),
+      canPost && btn("Post", () => editAnnouncement(null), "primary")),
+    rows.length
+      ? h("ul", { class: "annlist" }, rows.map(a => h("li", {},
+          h("button", { type: "button", class: "annlink", onclick: () => showAnnouncement(a) },
+            a.pinned && h("span", { class: "chip" }, "Pinned"), a.title))))
+      : h("p", { class: "empty", style: "margin:0" }, "Nothing posted right now."));
+}
+// Pop-out with the message and link. Hide is for this person only; Edit, Pin, Delete are the Board Master's.
+function showAnnouncement(a) {
+  const close = () => { scrim.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = e => { if (e.key === "Escape") close(); };
+  const act = (fn, msg) => async () => { close(); try { must(await fn()); route(); if (msg) toast(msg); } catch (e) { toast(e.message, true); } };
+  const inside = /^#\//.test(a.link || "");
+  const scrim = h("div", { class: "scrim", onclick: e => { if (e.target === scrim) close(); } },
+    h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": a.title },
+      h("h3", {}, a.title),
+      a.body && h("p", { style: "white-space:pre-line" }, a.body),
+      h("p", { class: "meta" }, [a.pinned ? "Pinned · " : "", a.created_by_name || "Game Town Square", " · ", lockTime(a.created_at)].join("")),
+      h("div", { class: "mbtns", style: "flex-wrap:wrap" },
+        a.link && h("a", { class: "btn primary", href: a.link, onclick: close, ...(inside ? {} : { target: "_blank", rel: "noopener" }) }, "Open link"),
+        a.can_edit && btn("Edit", () => { close(); editAnnouncement(a); }),
+        a.can_edit && btn(a.pinned ? "Unpin" : "Pin", act(() => sb.rpc("edit_announcement", { aid: a.id, t: a.title, b: a.body, l: a.link || "", pin: !a.pinned }))),
+        a.can_edit && btn("Delete", async () => {
+          close();
+          if (await confirmBox("Delete announcement?", `"${a.title}" comes down for everyone.`, "Delete", "danger"))
+            act(() => sb.rpc("delete_announcement", { aid: a.id }), "Deleted")();
+        }, "danger"),
+        btn("Hide it", act(() => sb.rpc("dismiss_announcement", { aid: a.id }), "Hidden")),
+        btn("Close", close))));
+  document.body.append(scrim);
+  document.addEventListener("keydown", onKey);
+  scrim.querySelector("button, a")?.focus();
+}
+async function editAnnouncement(a) {
+  const v = await modal({ title: a ? "Edit announcement" : "Post an announcement",
+    text: a ? null : "Everyone signed in sees it on their home screen for 14 days.",
+    fields: [{ name: "t", label: "Title", value: a?.title || "", required: true, maxlength: 120 },
+      { name: "b", label: "Message (optional)", value: a?.body || "", maxlength: 600 },
+      { name: "l", label: "Link (optional)", value: a?.link || "", maxlength: 300, placeholder: "https://... or #/p/..." }],
+    ok: a ? "Save" : "Post" });
+  if (!v || !v.t.trim()) return;
+  try {
+    must(await (a ? sb.rpc("edit_announcement", { aid: a.id, t: v.t, b: v.b || "", l: v.l || "", pin: a.pinned })
+                  : sb.rpc("post_announcement", { t: v.t, b: v.b || "", l: v.l || "" })));
+    route(); toast(a ? "Saved" : "Posted");
+  } catch (e) { toast(e.message, true); }
+}
+
+/* ---------- Ask to join a community ----------
+   A signed-in person finds a community and asks to join as a player. Every admin of that community
+   sees the request on their home screen and Players tab; one answer settles it. A request runs out
+   after 7 days. Everything stays inside the site: the asker sees the answer the next time they open it. */
+async function viewFind() {
+  const box = h("input", { type: "search", class: "search", placeholder: "Community or creator name", "aria-label": "Find a community", autocomplete: "off" });
+  const out = h("div");
+  let t = 0;
+  const load = async () => {
+    try {
+      const rows = must(await sb.rpc("find_communities", { q: box.value.trim() })) || [];
+      out.replaceChildren(rows.length
+        ? h("ul", { class: "list" }, rows.map(c => h("li", {},
+            h("div", {}, h("b", {}, c.name), h("div", { class: "meta" }, c.creator ? `Started by ${c.creator}` : "")),
+            c.requested ? h("span", { class: "chip" }, "Asked")
+              : btn("Ask to join", () => askToJoin(c), "primary"))))
+        : h("p", { class: "empty" }, box.value.trim() ? "No communities match that." : "No communities to join right now."));
+    } catch (e) { out.replaceChildren(h("p", { class: "err" }, e.message)); }
+  };
+  box.addEventListener("input", () => { clearTimeout(t); t = setTimeout(load, 250); });
+  render(
+    h("div", { class: "crumbs" }, h("a", { href: "#/" }, "Home")),
+    h("h1", {}, "Find a community"),
+    h("p", { class: "meta" }, "Ask to join as a player. The community's admins have 7 days to answer."),
+    box, out);
+  await load();
+  box.focus();
+}
+async function askToJoin(c) {
+  const v = await modal({ title: `Ask to join ${c.name}`, text: "The admins see your name and note. They have 7 days to answer, and you'll see their answer here.",
+    fields: [{ name: "note", label: "Note (optional)", maxlength: 300, placeholder: "Who you are, like \"Q's cousin\"" }], ok: "Send request" });
+  if (!v) return;
+  try { must(await sb.rpc("request_membership", { cid: c.id, msg: v.note || "" })); toast("Request sent"); route(); }
+  catch (e) { toast(e.message, true); }
+}
+// The asker's answers they haven't seen yet. Shown once, then cleared with Got it.
+function joinAnswers(rows) {
+  const done = rows.filter(r => r.status !== "pending");
+  if (!done.length) return null;
+  const ok = async () => { try { must(await sb.rpc("seen_membership_requests", { ids: done.map(r => r.id) })); route(); } catch (e) { toast(e.message, true); } };
+  return h("div", { class: "panel", style: "margin-bottom:18px" },
+    done.map(r => r.status === "approved"
+      ? h("p", {}, h("b", {}, `You're in ${r.community_name}. `), "Set up your squares. ", h("a", { href: "#/me?c=" + r.community_id }, "My squares"))
+      : r.status === "denied"
+        ? h("p", {}, `${r.community_name} didn't approve your request.`)
+        : h("p", {}, `Your request to join ${r.community_name} ran out after 7 days. You can ask again.`)),
+    h("div", { class: "actions", style: "margin:0" }, btn("Got it", ok, "primary")));
+}
+// The asker's waiting requests
+function joinWaiting(rows) {
+  const open = rows.filter(r => r.status === "pending");
+  if (!open.length) return null;
+  return [h("h1", {}, "Waiting to join"),
+    h("ul", { class: "list" }, open.map(r => h("li", {},
+      h("div", {}, h("b", {}, r.community_name), h("div", { class: "meta" }, `Asked ${lockTime(r.created_at)} · runs out ${lockTime(r.expires_at)}`)),
+      btn("Cancel", async () => {
+        try { must(await sb.rpc("cancel_membership_request", { rid: r.id })); route(); toast("Request canceled"); } catch (e) { toast(e.message, true); }
+      }))))];
+}
+// Admin side: waiting requests, with Approve and Deny. showComm adds the community name (home screen).
+function joinReqList(rows, showComm) {
+  const answer = (r, yes) => async () => {
+    try { must(await sb.rpc("decide_membership_request", { rid: r.id, approve: yes })); route(); toast(yes ? `${r.display_name} is in` : "Request denied"); }
+    catch (e) { toast(e.message, true); route(); }
+  };
+  return h("div", { class: "people", style: "margin-bottom:22px" }, rows.map(r => h("div", { class: "person" },
+    h("div", { class: "phead" }, h("div", {}, h("b", {}, r.display_name),
+      h("div", { class: "meta" }, `${showComm ? `Wants to join ${r.community_name} · ` : ""}asked ${lockTime(r.created_at)} · runs out ${lockTime(r.expires_at)}`))),
+    r.note && h("p", { class: "meta" }, `"${r.note}"`),
+    h("div", { class: "actions" }, btn("Approve", answer(r, true), "primary"), btn("Deny", answer(r, false), "danger")))));
+}
+
 /* ---------- Players, invites, saved squares ----------
    An admin shares the community's invite link (reusable until turned off) or a one-time code.
    Players get view access and save their squares per league in their profile. Every new board
@@ -3559,11 +3864,13 @@ async function playersTab(c) {
     sb.rpc("community_members_list", { cid: c.id }).then(must),
     sb.from("square_defaults").select("id,user_id,league,square,display_name,saved_for").eq("community_id", c.id).order("league").order("square").then(must)]);
   const url = link("#/i/" + inv.token);
+  const joinReqs = must(await sb.rpc("community_join_requests", { cid: c.id })) || [];
   const owners = members;                                  // anyone who can own a square here (players, you, admins)
   members = members.filter(m => m.is_member);              // invited players
   const nameOf = uid => owners.find(m => m.user_id === uid)?.display_name;
   const save = fn => async () => { try { await fn(); route(); } catch (e) { toast(e.message, true); } };
   return h("div", {},
+    joinReqs.length ? [h("h2", {}, `Join requests (${joinReqs.length})`), joinReqList(joinReqs, false)] : null,
     h("h2", {}, "Invite players"),
     h("p", { class: "meta" }, "Players can see this community's boards and save their squares. Every new board in a league starts with those squares filled in."),
     h("div", { class: "panel" },
